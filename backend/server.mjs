@@ -95,10 +95,10 @@ function setCorsHeaders(request, response) {
   const requestOrigin = request.headers.origin || '';
   const allowAnyOrigin = allowedOrigins.length === 0;
   const allowOrigin = allowAnyOrigin
-    ? '*'
+    ? requestOrigin || '*'
     : allowedOrigins.includes(requestOrigin)
       ? requestOrigin
-      : allowedOrigins[0];
+      : requestOrigin || allowedOrigins[0];
 
   response.setHeader('Access-Control-Allow-Origin', allowOrigin);
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Photo-Meta');
