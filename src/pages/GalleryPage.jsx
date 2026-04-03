@@ -160,10 +160,7 @@ export default function GalleryPage() {
   function openPhoto(event, photoId) {
     event.preventDefault();
     event.stopPropagation();
-
-    window.setTimeout(() => {
-      setSelectedPhotoId(photoId);
-    }, 0);
+    setSelectedPhotoId(photoId);
   }
 
   function closePhoto() {
