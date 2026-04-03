@@ -17,6 +17,10 @@ const allowedAdminEmails = (process.env.ADMIN_EMAILS || '')
   .split(',')
   .map((value) => value.trim().toLowerCase())
   .filter(Boolean);
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 const verifiedAdminCache = new Map();
 const verifiedAdminTtlMs = 1000 * 60 * 10;
 
@@ -87,10 +91,19 @@ function sendText(response, statusCode, message) {
   response.end(message);
 }
 
-function setCorsHeaders(response) {
-  response.setHeader('Access-Control-Allow-Origin', '*');
+function setCorsHeaders(request, response) {
+  const requestOrigin = request.headers.origin || '';
+  const allowAnyOrigin = allowedOrigins.length === 0;
+  const allowOrigin = allowAnyOrigin
+    ? '*'
+    : allowedOrigins.includes(requestOrigin)
+      ? requestOrigin
+      : allowedOrigins[0];
+
+  response.setHeader('Access-Control-Allow-Origin', allowOrigin);
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Photo-Meta');
   response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+  response.setHeader('Vary', 'Origin');
 }
 
 async function readJsonBody(request) {
@@ -482,7 +495,7 @@ async function handleStaticUpload(response, pathname) {
 }
 
 const server = createServer(async (request, response) => {
-  setCorsHeaders(response);
+  setCorsHeaders(request, response);
 
   if (request.method === 'OPTIONS') {
     response.writeHead(204);
@@ -496,6 +509,11 @@ const server = createServer(async (request, response) => {
   try {
     if (request.method === 'GET' && pathname === '/api/public/photos') {
       await handlePublicPhotos(response);
+      return;
+    }
+
+    if (request.method === 'GET' && pathname === '/api/health') {
+      sendJson(response, 200, { ok: true });
       return;
     }
 

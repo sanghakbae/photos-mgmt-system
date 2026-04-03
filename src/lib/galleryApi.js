@@ -1,12 +1,33 @@
 import { loadAdminSession } from './googleAuth';
 
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
+
+function toApiUrl(path) {
+  if (!apiBaseUrl) {
+    return path;
+  }
+
+  return `${apiBaseUrl}${path}`;
+}
+
+function withAssetUrl(photo) {
+  if (!photo?.imageUrl || /^https?:\/\//.test(photo.imageUrl) || !apiBaseUrl) {
+    return photo;
+  }
+
+  return {
+    ...photo,
+    imageUrl: `${apiBaseUrl}${photo.imageUrl}`,
+  };
+}
+
 async function request(path, options = {}) {
   const headers = { ...(options.headers ?? {}) };
   if (!('Content-Type' in headers) && !('content-type' in headers) && options.body && !(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const response = await fetch(path, {
+  const response = await fetch(toApiUrl(path), {
     ...options,
     headers,
   });
@@ -26,7 +47,7 @@ function getAdminToken() {
 }
 
 export function getPublicPhotos() {
-  return request('/api/public/photos').then((data) => data?.photos ?? []);
+  return request('/api/public/photos').then((data) => (data?.photos ?? []).map(withAssetUrl));
 }
 
 export function getAdminPhotos() {
@@ -34,7 +55,7 @@ export function getAdminPhotos() {
     headers: {
       Authorization: `Bearer ${getAdminToken()}`,
     },
-  }).then((data) => data?.photos ?? []);
+  }).then((data) => (data?.photos ?? []).map(withAssetUrl));
 }
 
 export function uploadAdminPhoto(payload) {
@@ -75,5 +96,5 @@ export function getPhotoDownloadUrl(photo) {
     return '';
   }
 
-  return `/api/public/photos/${photo.id}/download`;
+  return toApiUrl(`/api/public/photos/${photo.id}/download`);
 }

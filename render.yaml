@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: photos-mgmt-system-api
+    runtime: node
+    plan: free
+    buildCommand: npm ci
+    startCommand: npm run dev:server
+    healthCheckPath: /api/health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: https://sanghakbae.github.io
