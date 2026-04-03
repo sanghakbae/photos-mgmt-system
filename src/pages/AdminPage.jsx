@@ -19,7 +19,9 @@ import {
   getSeasonLabel,
 } from '../lib/photoUtils';
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? '';
+const GOOGLE_CLIENT_ID =
+  import.meta.env.VITE_GOOGLE_CLIENT_ID ??
+  '512795114030-n0peq4vula8vrc2umfj8b6gfcjufo8sg.apps.googleusercontent.com';
 const ACCEPTED_TYPES = new Set([
   'image/jpeg',
   'image/jpg',
