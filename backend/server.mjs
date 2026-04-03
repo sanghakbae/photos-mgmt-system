@@ -15,6 +15,7 @@ const photosFile = path.join(dataDir, 'photos.json');
 const settingsFile = path.join(dataDir, 'settings.json');
 const port = Number(process.env.PORT || 8787);
 const host = process.env.HOST || '127.0.0.1';
+const migrationToken = String(process.env.MIGRATION_TOKEN || '').trim();
 const allowedAdminEmails = (process.env.ADMIN_EMAILS || '')
   .split(',')
   .map((value) => value.trim().toLowerCase())
@@ -130,6 +131,21 @@ async function readRawBody(request) {
   }
 
   return Buffer.concat(chunks);
+}
+
+function requireMigrationToken(request) {
+  if (!migrationToken) {
+    throw new Error('Migration token is not configured.');
+  }
+
+  const authorization = request.headers.authorization || '';
+  const token = authorization.startsWith('Bearer ') ? authorization.slice(7).trim() : '';
+
+  if (!token || token !== migrationToken) {
+    const error = new Error('Invalid migration token.');
+    error.statusCode = 401;
+    throw error;
+  }
 }
 
 function sanitizeFileName(fileName) {
@@ -479,6 +495,70 @@ async function handleUpdateSettings(request, response) {
   sendJson(response, 200, next);
 }
 
+async function handleMigrationPhoto(request, response) {
+  requireMigrationToken(request);
+
+  const metaHeader = String(request.headers['x-photo-meta'] || '');
+  if (!metaHeader) {
+    sendJson(response, 400, { error: 'Missing photo metadata.' });
+    return;
+  }
+
+  const meta = JSON.parse(Buffer.from(metaHeader, 'base64').toString('utf8'));
+  const fileBuffer = await readRawBody(request);
+  if (!fileBuffer.length) {
+    sendJson(response, 400, { error: 'Missing image data.' });
+    return;
+  }
+
+  const fileName = String(meta.fileName || '').trim();
+  const mimeType = String(meta.mimeType || request.headers['content-type'] || 'application/octet-stream');
+  const imagePathName = path.basename(meta.imageUrl || `${meta.id || randomUUID()}.jpg`);
+  const storagePath = path.join(uploadsDir, imagePathName);
+  const photos = await readPhotos();
+  const photoId = String(meta.id || randomUUID()).trim();
+  const now = new Date().toISOString();
+
+  await writeFile(storagePath, fileBuffer);
+
+  const record = {
+    id: photoId,
+    title: meta.title || path.basename(fileName || imagePathName, path.extname(imagePathName)),
+    note: meta.note || '',
+    locationText: meta.locationText || '',
+    capturedAt: meta.capturedAt || '',
+    fileName: sanitizeFileName(fileName || imagePathName),
+    mimeType,
+    imageUrl: `/uploads/${imagePathName}`,
+    coordinatesText: meta.coordinatesText || '',
+    mapsUrl: meta.mapsUrl || '',
+    createdAt: meta.createdAt || now,
+    updatedAt: meta.updatedAt || meta.createdAt || now,
+    createdBy: meta.createdBy || 'migration',
+    sha256: meta.sha256 || createHash('sha256').update(fileBuffer).digest('hex'),
+  };
+
+  const existingIndex = photos.findIndex((photo) => photo.id === photoId);
+  if (existingIndex >= 0) {
+    photos[existingIndex] = record;
+  } else {
+    photos.unshift(record);
+  }
+
+  await writePhotos(photos);
+  sendJson(response, 200, { ok: true, photo: record });
+}
+
+async function handleMigrationSettings(request, response) {
+  requireMigrationToken(request);
+  const body = await readJsonBody(request);
+  const next = {
+    siteTitle: String(body.siteTitle || "Photo's room").trim(),
+  };
+  await writeSettings(next);
+  sendJson(response, 200, next);
+}
+
 async function handleStaticUpload(response, pathname) {
   const fileName = path.basename(pathname);
   const filePath = path.join(uploadsDir, fileName);
@@ -546,6 +626,16 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === 'POST' && pathname === '/api/internal/migrate/photos') {
+      await handleMigrationPhoto(request, response);
+      return;
+    }
+
+    if (request.method === 'POST' && pathname === '/api/internal/migrate/settings') {
+      await handleMigrationSettings(request, response);
+      return;
+    }
+
     if (request.method === 'POST' && pathname === '/api/admin/photos') {
       await handleUploadPhoto(request, response);
       return;
@@ -571,7 +661,7 @@ const server = createServer(async (request, response) => {
     sendJson(response, 404, { error: 'Not found.' });
   } catch (error) {
     console.error(error);
-    sendJson(response, 500, {
+    sendJson(response, error?.statusCode || 500, {
       error: error instanceof Error ? error.message : String(error),
     });
   }

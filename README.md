@@ -21,12 +21,14 @@
 - `ADMIN_EMAILS`
 - `ALLOWED_ORIGINS`
 - `DATA_DIR`
+- `MIGRATION_TOKEN`
 
 ## Render
 
 - `render.yaml` 포함
 - `HOST=0.0.0.0`
 - `DATA_DIR=/var/data`로 영속 디스크 경로 사용
+- 기존 로컬 사진을 Render 디스크로 옮길 때는 `MIGRATION_TOKEN`을 설정한 뒤 `node scripts/migrate-photos-to-render.mjs <api-base-url> <migration-token>` 실행
 - `ADMIN_EMAILS`는 Render 대시보드에서 직접 입력
 - `ALLOWED_ORIGINS`는 GitHub Pages 도메인으로 설정
 - 업로드 이미지는 `backend/data/uploads`가 아니라 Render 디스크에 저장되어야 재배포 후에도 유지됨

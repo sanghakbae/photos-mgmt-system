@@ -15,6 +15,8 @@ services:
         value: 0.0.0.0
       - key: DATA_DIR
         value: /var/data
+      - key: MIGRATION_TOKEN
+        sync: false
       - key: ADMIN_EMAILS
         sync: false
       - key: ALLOWED_ORIGINS
