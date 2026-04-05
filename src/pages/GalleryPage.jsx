@@ -2,18 +2,26 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   Download,
   Images,
+  LoaderCircle,
   MapPin,
   MessageSquareText,
   Search,
-  X,
 } from 'lucide-react';
-import { getPhotoDownloadUrl, getPublicPhotos } from '../lib/galleryApi';
-import { formatDate } from '../lib/photoUtils';
+import { getPhotoDownloadUrl, getPublicPhotos, getPublicSystemStatus } from '../lib/galleryApi';
+import { formatDate, getDisplayPhotoTitle } from '../lib/photoUtils';
 
 const PUBLIC_GALLERY_REFRESH_MS = 10000;
+const STATUS_REFRESH_MS = 15000;
 const DEFAULT_WATERMARK = 'totoriverce@naver.com';
+const SLIDESHOW_SPEED_OPTIONS = [
+  { label: '2초', value: 2000 },
+  { label: '5초', value: 5000 },
+  { label: '10초', value: 10000 },
+];
 
 const starterMemories = [
   {
@@ -52,6 +60,16 @@ export default function GalleryPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [selectedPhotoId, setSelectedPhotoId] = useState(null);
+  const [slideshowSpeed, setSlideshowSpeed] = useState(5000);
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const [slideshowVisible, setSlideshowVisible] = useState(true);
+  const [systemStatus, setSystemStatus] = useState({
+    loading: true,
+    renderOk: false,
+    storageOk: false,
+    storageBackend: '',
+    message: '상태 확인 중',
+  });
 
   async function loadPublicPhotos({ silent = false } = {}) {
     if (!silent) {
@@ -76,6 +94,28 @@ export default function GalleryPage() {
     }
   }
 
+  async function loadSystemStatus() {
+    try {
+      const status = await getPublicSystemStatus();
+      setSystemStatus({
+        loading: false,
+        renderOk: Boolean(status?.render?.ok),
+        storageOk: Boolean(status?.storage?.ok),
+        storageBackend: status?.storage?.backend || '',
+        message: status?.storage?.message || status?.render?.message || '상태 확인 완료',
+      });
+    } catch (statusError) {
+      console.error(statusError);
+      setSystemStatus({
+        loading: false,
+        renderOk: false,
+        storageOk: false,
+        storageBackend: '',
+        message: statusError instanceof Error ? statusError.message : '상태를 불러오지 못했습니다.',
+      });
+    }
+  }
+
   useEffect(() => {
     let active = true;
 
@@ -88,16 +128,23 @@ export default function GalleryPage() {
     }
 
     loadPhotos();
+    loadSystemStatus();
 
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === 'visible') {
         loadPublicPhotos({ silent: true });
       }
     }, PUBLIC_GALLERY_REFRESH_MS);
+    const statusIntervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadSystemStatus();
+      }
+    }, STATUS_REFRESH_MS);
 
     function handleVisibilityChange() {
       if (document.visibilityState === 'visible') {
         loadPublicPhotos({ silent: true });
+        loadSystemStatus();
       }
     }
 
@@ -106,19 +153,9 @@ export default function GalleryPage() {
     return () => {
       active = false;
       window.clearInterval(intervalId);
+      window.clearInterval(statusIntervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
-
-  useEffect(() => {
-    function handleKeydown(event) {
-      if (event.key === 'Escape') {
-        setSelectedPhotoId(null);
-      }
-    }
-
-    window.addEventListener('keydown', handleKeydown);
-    return () => window.removeEventListener('keydown', handleKeydown);
   }, []);
 
   const displayPhotos = useMemo(() => {
@@ -152,10 +189,33 @@ export default function GalleryPage() {
     };
   }, [photos]);
 
+  const slideshowPhotos = useMemo(() => {
+    const source = photos.length > 0 ? photos : starterMemories;
+    return source;
+  }, [photos]);
+
+  const activeSlide = slideshowPhotos[activeSlideIndex] ?? slideshowPhotos[0] ?? null;
+
   const selectedPhoto = useMemo(() => {
     const source = photos.length > 0 ? photos : starterMemories;
     return source.find((photo) => photo.id === selectedPhotoId) ?? null;
   }, [photos, selectedPhotoId]);
+
+  const selectedPhotoIndex = useMemo(() => {
+    if (!selectedPhotoId) {
+      return -1;
+    }
+
+    return displayPhotos.findIndex((photo) => photo.id === selectedPhotoId);
+  }, [displayPhotos, selectedPhotoId]);
+
+  const hasMultipleDisplayPhotos = displayPhotos.length > 1;
+  const hasMultipleSlides = slideshowPhotos.length > 1;
+  const systemStatusClassName = systemStatus.loading
+    ? 'status-pill status-pill-pending topbar-action-button topbar-status-pill'
+    : systemStatus.renderOk && systemStatus.storageOk
+      ? 'status-pill status-pill-connected topbar-action-button topbar-status-pill'
+      : 'status-pill status-pill-disconnected topbar-action-button topbar-status-pill';
 
   function openPhoto(event, photoId) {
     event.preventDefault();
@@ -167,6 +227,28 @@ export default function GalleryPage() {
     setSelectedPhotoId(null);
   }
 
+  function moveSelectedPhoto(direction) {
+    if (!hasMultipleDisplayPhotos || selectedPhotoIndex < 0) {
+      return;
+    }
+
+    const nextIndex =
+      (selectedPhotoIndex + direction + displayPhotos.length) % displayPhotos.length;
+    setSelectedPhotoId(displayPhotos[nextIndex]?.id ?? null);
+  }
+
+  function moveSlide(direction) {
+    if (!hasMultipleSlides) {
+      return;
+    }
+
+    setActiveSlideIndex((currentIndex) => {
+      const nextIndex =
+        (currentIndex + direction + slideshowPhotos.length) % slideshowPhotos.length;
+      return nextIndex;
+    });
+  }
+
   function handleBackdropClick(event) {
     if (event.target !== event.currentTarget) {
       return;
@@ -174,6 +256,75 @@ export default function GalleryPage() {
 
     closePhoto();
   }
+
+  useEffect(() => {
+    function handleKeydown(event) {
+      if (event.key === 'Escape') {
+        setSelectedPhotoId(null);
+        return;
+      }
+
+      if (!selectedPhotoId) {
+        return;
+      }
+
+      if (event.key === 'ArrowLeft') {
+        moveSelectedPhoto(-1);
+      } else if (event.key === 'ArrowRight') {
+        moveSelectedPhoto(1);
+      }
+    }
+
+    window.addEventListener('keydown', handleKeydown);
+    return () => window.removeEventListener('keydown', handleKeydown);
+  }, [displayPhotos, hasMultipleDisplayPhotos, selectedPhotoId, selectedPhotoIndex]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return undefined;
+    }
+
+    const mediaQuery = window.matchMedia('(max-width: 720px) and (orientation: landscape)');
+
+    function handleLandscapeChange(event) {
+      if (event.matches) {
+        setSlideshowVisible(true);
+      }
+    }
+
+    handleLandscapeChange(mediaQuery);
+
+    if (typeof mediaQuery.addEventListener === 'function') {
+      mediaQuery.addEventListener('change', handleLandscapeChange);
+      return () => mediaQuery.removeEventListener('change', handleLandscapeChange);
+    }
+
+    mediaQuery.addListener(handleLandscapeChange);
+    return () => mediaQuery.removeListener(handleLandscapeChange);
+  }, []);
+
+  useEffect(() => {
+    if (!slideshowPhotos.length) {
+      setActiveSlideIndex(0);
+      return;
+    }
+
+    setActiveSlideIndex((currentIndex) =>
+      Math.min(currentIndex, slideshowPhotos.length - 1),
+    );
+  }, [slideshowPhotos]);
+
+  useEffect(() => {
+    if (!hasMultipleSlides) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setActiveSlideIndex((currentIndex) => (currentIndex + 1) % slideshowPhotos.length);
+    }, slideshowSpeed);
+
+    return () => window.clearInterval(intervalId);
+  }, [hasMultipleSlides, slideshowPhotos.length, slideshowSpeed]);
 
   return (
     <div className="app-shell">
@@ -184,7 +335,7 @@ export default function GalleryPage() {
         <div className="gallery-topbar">
           <div className="gallery-topbar-copy">
             <p className="eyebrow">Public Gallery</p>
-            <h1>Photo&apos;s room</h1>
+            <h1>그날의 기록 (Records of the Day)</h1>
             <p className="gallery-topbar-meta">
               공개 사진 {stats.total}장
               <span className="gallery-topbar-divider">·</span>
@@ -193,20 +344,97 @@ export default function GalleryPage() {
           </div>
 
           <div className="gallery-topbar-actions">
-            <div className="status-pill topbar-action-button topbar-status-pill">
-              <Images size={16} />
-              {loading
-                ? '불러오는 중'
-                : refreshing
-                  ? '갱신 중'
-                  : '공개 열람'}
+            <div className={systemStatusClassName} title={systemStatus.message}>
+              {systemStatus.loading ? <LoaderCircle size={16} className="spin" /> : <Images size={16} />}
+              {systemStatus.loading
+                ? '신호 확인 중'
+                : systemStatus.renderOk && systemStatus.storageOk
+                  ? `정상 연결 · ${systemStatus.storageBackend === 'r2' ? 'Cloudflare' : 'Local'}`
+                  : '연결 이상'}
             </div>
+            <button
+              type="button"
+              className="secondary-button topbar-action-button"
+              onClick={() => setSlideshowVisible((current) => !current)}
+            >
+              {slideshowVisible ? '슬라이드쇼 숨기기' : '슬라이드쇼 보기'}
+            </button>
             <Link className="secondary-button topbar-action-button" to="/admin">
               관리자
             </Link>
           </div>
         </div>
       </header>
+
+      {slideshowVisible && activeSlide ? (
+        <section className="hero-panel slideshow-panel">
+          <div className="slideshow-stage">
+            <button
+              type="button"
+              className="slideshow-photo-button"
+              onClick={(event) => openPhoto(event, activeSlide.id)}
+              aria-label={`${getDisplayPhotoTitle(activeSlide)} 슬라이드 사진 크게 보기`}
+            >
+              <img
+                src={activeSlide.imageUrl}
+                alt={getDisplayPhotoTitle(activeSlide)}
+                className="slideshow-image"
+                decoding="async"
+              />
+              <div className="slideshow-overlay">
+                <div className="slideshow-copy">
+                  <p className="eyebrow">Slideshow</p>
+                  <h2>{getDisplayPhotoTitle(activeSlide)}</h2>
+                  <p>{activeSlide.locationText || '위치 정보 없음'}</p>
+                </div>
+              </div>
+            </button>
+
+            {hasMultipleSlides ? (
+              <>
+                <button
+                  type="button"
+                  className="icon-button slideshow-nav-button slideshow-nav-button-left"
+                  onClick={() => moveSlide(-1)}
+                  aria-label="이전 슬라이드 보기"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-button slideshow-nav-button slideshow-nav-button-right"
+                  onClick={() => moveSlide(1)}
+                  aria-label="다음 슬라이드 보기"
+                >
+                  <ChevronRight size={20} />
+                </button>
+              </>
+            ) : null}
+          </div>
+
+          <div className="slideshow-controls">
+            <div className="slideshow-speed-selector" role="radiogroup" aria-label="슬라이드쇼 속도">
+              {SLIDESHOW_SPEED_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`slideshow-speed-button ${
+                    slideshowSpeed === option.value ? 'is-active' : ''
+                  }`}
+                  onClick={() => setSlideshowSpeed(option.value)}
+                  aria-pressed={slideshowSpeed === option.value}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="slideshow-position" aria-live="polite">
+              {slideshowPhotos.length > 0 ? `${activeSlideIndex + 1} / ${slideshowPhotos.length}` : '0 / 0'}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="toolbar">
         <label className="search-field" htmlFor="photo-search">
@@ -239,7 +467,7 @@ export default function GalleryPage() {
               type="button"
               className="photo-open-button"
               onClick={(event) => openPhoto(event, photo.id)}
-              aria-label={`${photo.title} 크게 보기`}
+              aria-label={`${getDisplayPhotoTitle(photo)} 크게 보기`}
             >
               <div className="photo-frame">
                 <img
@@ -254,7 +482,7 @@ export default function GalleryPage() {
               <div className="photo-content">
                 <div className="photo-heading">
                   <div>
-                    <h2>{photo.title}</h2>
+                    <h2>{getDisplayPhotoTitle(photo)}</h2>
                     <p>{photo.fileName ?? '안내 카드'}</p>
                   </div>
                 </div>
@@ -289,40 +517,62 @@ export default function GalleryPage() {
         >
           <section
             className="photo-modal"
-            onClick={(event) => event.stopPropagation()}
-            aria-label={`${selectedPhoto.title} 사진 크게 보기`}
+            onClick={closePhoto}
+            aria-label={`${getDisplayPhotoTitle(selectedPhoto)} 사진 크게 보기`}
           >
-            <div className="photo-modal-media">
-              <div className="photo-modal-visual">
-                <button
-                  type="button"
-                  className="icon-button modal-close-button"
-                  onClick={closePhoto}
-                  aria-label="상세 보기 닫기"
+            <div className="photo-modal-panel">
+              <div className="photo-modal-media">
+                <div
+                  className="photo-modal-visual"
+                  onClick={(event) => event.stopPropagation()}
                 >
-                  <X size={18} />
-                </button>
-                <img
-                  src={selectedPhoto.imageUrl}
-                  alt={selectedPhoto.title}
-                  decoding="async"
-                />
-                {!selectedPhoto.isPlaceholder ? (
-                  <a
-                    className="secondary-button topbar-action-button photo-download-button"
-                    href={getPhotoDownloadUrl(selectedPhoto)}
-                    download
-                  >
-                    <Download size={16} />
-                    사진 다운로드
-                  </a>
-                ) : null}
+                  {hasMultipleDisplayPhotos ? (
+                    <button
+                      type="button"
+                      className="icon-button photo-nav-button photo-nav-button-left"
+                      onClick={() => moveSelectedPhoto(-1)}
+                      aria-label="이전 사진 보기"
+                    >
+                      <ChevronLeft size={20} />
+                    </button>
+                  ) : null}
+                  <img
+                    src={selectedPhoto.imageUrl}
+                    alt={getDisplayPhotoTitle(selectedPhoto)}
+                    decoding="async"
+                  />
+                  {hasMultipleDisplayPhotos ? (
+                    <button
+                      type="button"
+                      className="icon-button photo-nav-button photo-nav-button-right"
+                      onClick={() => moveSelectedPhoto(1)}
+                      aria-label="다음 사진 보기"
+                    >
+                      <ChevronRight size={20} />
+                    </button>
+                  ) : null}
+                </div>
               </div>
-            </div>
-            <div className="photo-modal-meta">
-              <h2>{selectedPhoto.title}</h2>
-              <p>{selectedPhoto.note || '등록된 메모가 없습니다.'}</p>
-              <p>{selectedPhoto.locationText || '위치 정보 없음'}</p>
+              <div
+                className="photo-modal-meta"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <h2>{getDisplayPhotoTitle(selectedPhoto)}</h2>
+                <div className="photo-modal-note-row">
+                  <p>{selectedPhoto.note || '등록된 메모가 없습니다.'}</p>
+                  {!selectedPhoto.isPlaceholder ? (
+                    <a
+                      className="secondary-button topbar-action-button photo-download-button"
+                      href={getPhotoDownloadUrl(selectedPhoto)}
+                      download
+                    >
+                      <Download size={16} />
+                      사진 다운로드
+                    </a>
+                  ) : null}
+                </div>
+                <p>{selectedPhoto.locationText || '위치 정보 없음'}</p>
+              </div>
             </div>
           </section>
         </div>

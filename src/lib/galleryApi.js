@@ -142,12 +142,24 @@ export function getPublicPhotos() {
   return request('/api/public/photos').then((data) => (data?.photos ?? []).map(withAssetUrl));
 }
 
+export function getPublicSystemStatus() {
+  return request('/api/public/status');
+}
+
 export function getAdminPhotos() {
   return request('/api/admin/photos', {
     headers: {
       Authorization: `Bearer ${getAdminToken()}`,
     },
   }).then((data) => (data?.photos ?? []).map(withAssetUrl));
+}
+
+export function getAdminStorageSummary() {
+  return request('/api/admin/storage-summary', {
+    headers: {
+      Authorization: `Bearer ${getAdminToken()}`,
+    },
+  });
 }
 
 export function uploadAdminPhoto(payload) {

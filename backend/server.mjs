@@ -7,6 +7,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -38,6 +39,7 @@ const r2AccountId = String(process.env.R2_ACCOUNT_ID || '').trim();
 const r2AccessKeyId = String(process.env.R2_ACCESS_KEY_ID || '').trim();
 const r2SecretAccessKey = String(process.env.R2_SECRET_ACCESS_KEY || '').trim();
 const r2BucketName = String(process.env.R2_BUCKET_NAME || '').trim();
+const r2PublicBaseUrl = String(process.env.R2_PUBLIC_BASE_URL || '').trim().replace(/\/$/, '');
 const r2Enabled = Boolean(
   r2AccountId &&
   r2AccessKeyId &&
@@ -51,6 +53,7 @@ const r2Client = r2Enabled
   ? new S3Client({
       region: 'auto',
       endpoint: r2Endpoint,
+      forcePathStyle: true,
       credentials: {
         accessKeyId: r2AccessKeyId,
         secretAccessKey: r2SecretAccessKey,
@@ -71,6 +74,7 @@ const thumbnailWidth = 640;
 const thumbnailHeight = 640;
 const photosObjectKey = 'metadata/photos.json';
 const settingsObjectKey = 'metadata/settings.json';
+const defaultSiteTitle = '그날의 기록 (Records of the Day)';
 
 function getUploadObjectKey(fileName) {
   return `uploads/${fileName}`;
@@ -78,6 +82,14 @@ function getUploadObjectKey(fileName) {
 
 function getThumbnailObjectKey(photoId) {
   return `thumbnails/${getThumbnailName(photoId)}`;
+}
+
+function getPublicAssetUrl(objectKey, fallbackPath) {
+  if (r2Enabled && r2PublicBaseUrl) {
+    return `${r2PublicBaseUrl}/${objectKey}`;
+  }
+
+  return fallbackPath;
 }
 
 async function objectExists(key) {
@@ -138,6 +150,60 @@ async function deleteObject(key) {
   }));
 }
 
+async function getStorageUsageSummary() {
+  if (r2Enabled) {
+    let continuationToken;
+    let totalBytes = 0;
+    let objectCount = 0;
+
+    do {
+      const response = await r2Client.send(new ListObjectsV2Command({
+        Bucket: r2BucketName,
+        ContinuationToken: continuationToken,
+      }));
+
+      for (const item of response.Contents ?? []) {
+        totalBytes += Number(item.Size || 0);
+        objectCount += 1;
+      }
+
+      continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
+    } while (continuationToken);
+
+    return {
+      backend: 'r2',
+      totalBytes,
+      objectCount,
+    };
+  }
+
+  let totalBytes = 0;
+  let objectCount = 0;
+
+  const filePaths = [photosFile, settingsFile];
+  const photos = await readPhotos();
+  for (const photo of photos) {
+    filePaths.push(path.join(uploadsDir, path.basename(photo.imageUrl || '')));
+    filePaths.push(path.join(thumbnailsDir, getThumbnailName(photo.id)));
+  }
+
+  for (const filePath of filePaths) {
+    try {
+      const fileStat = await stat(filePath);
+      totalBytes += fileStat.size;
+      objectCount += 1;
+    } catch {
+      // Ignore missing local files in summary.
+    }
+  }
+
+  return {
+    backend: 'local',
+    totalBytes,
+    objectCount,
+  };
+}
+
 async function readJsonObject(key, fallback) {
   try {
     const buffer = await getObjectBuffer(key);
@@ -162,7 +228,7 @@ async function ensureDataFiles() {
     }
 
     if (!(await objectExists(settingsObjectKey))) {
-      await writeJsonObject(settingsObjectKey, { siteTitle: "Photo's room" });
+      await writeJsonObject(settingsObjectKey, { siteTitle: defaultSiteTitle });
     }
 
     return;
@@ -181,7 +247,7 @@ async function ensureDataFiles() {
   } catch {
     await writeFile(
       settingsFile,
-      `${JSON.stringify({ siteTitle: "Photo's room" }, null, 2)}\n`,
+      `${JSON.stringify({ siteTitle: defaultSiteTitle }, null, 2)}\n`,
       'utf8',
     );
   }
@@ -210,7 +276,7 @@ async function writePhotos(photos) {
 async function readSettings() {
   await ensureDataFiles();
   if (r2Enabled) {
-    return readJsonObject(settingsObjectKey, { siteTitle: "Photo's room" });
+    return readJsonObject(settingsObjectKey, { siteTitle: defaultSiteTitle });
   }
 
   const raw = await readFile(settingsFile, 'utf8');
@@ -339,30 +405,61 @@ function getDownloadFormat(mimeType, fileName) {
 
 function createWatermarkSvg(width, height) {
   const margin = Math.max(18, Math.round(Math.min(width, height) * 0.028));
-  const fontSize = Math.max(18, Math.round(Math.min(width, height) * 0.022));
+  const fontSize = Math.max(14, Math.round(Math.min(width, height) * 0.016));
   const x = width - margin;
   const y = height - margin;
 
   return Buffer.from(`
     <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
       <defs>
-        <filter id="text-shadow" x="-20%" y="-20%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.28"/>
+        <filter id="extrude" x="-30%" y="-30%" width="190%" height="190%">
+          <feOffset in="SourceAlpha" dx="0.8" dy="0.8" result="offset1"/>
+          <feOffset in="SourceAlpha" dx="1.6" dy="1.6" result="offset2"/>
+          <feOffset in="SourceAlpha" dx="2.4" dy="2.4" result="offset3"/>
+          <feOffset in="SourceAlpha" dx="3.2" dy="3.2" result="offset4"/>
+          <feFlood flood-color="#000000" flood-opacity="0.18" result="depthColor"/>
+          <feComposite in="depthColor" in2="offset1" operator="in" result="depth1"/>
+          <feComposite in="depthColor" in2="offset2" operator="in" result="depth2"/>
+          <feComposite in="depthColor" in2="offset3" operator="in" result="depth3"/>
+          <feComposite in="depthColor" in2="offset4" operator="in" result="depth4"/>
+          <feMerge result="depthStack">
+            <feMergeNode in="depth4"/>
+            <feMergeNode in="depth3"/>
+            <feMergeNode in="depth2"/>
+            <feMergeNode in="depth1"/>
+          </feMerge>
+          <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000000" flood-opacity="0.24"/>
+        </filter>
+        <filter id="shine" x="-20%" y="-20%" width="160%" height="160%">
+          <feDropShadow dx="-0.8" dy="-0.8" stdDeviation="1.3" flood-color="#ffffff" flood-opacity="0.36"/>
         </filter>
       </defs>
       <text
         x="${x}"
         y="${y}"
         text-anchor="end"
-        fill="rgba(255,255,255,0.94)"
-        stroke="rgba(0,0,0,0.18)"
-        stroke-width="0.6"
+        fill="rgba(0,0,0,0.01)"
+        font-size="${fontSize}"
+        font-family="'Didot','Bodoni 72','Cormorant Garamond','Times New Roman',serif"
+        font-weight="800"
+        font-style="italic"
+        letter-spacing="0.45"
+        filter="url(#extrude)"
+      >${escapeXml(downloadWatermark)}</text>
+      <text
+        x="${x}"
+        y="${y}"
+        text-anchor="end"
+        fill="rgba(255,255,255,0.05)"
+        stroke="rgba(255,255,255,0.22)"
+        stroke-width="0.32"
         paint-order="stroke"
         font-size="${fontSize}"
         font-family="'Didot','Bodoni 72','Cormorant Garamond','Times New Roman',serif"
-        font-weight="700"
-        letter-spacing="0.6"
-        filter="url(#text-shadow)"
+        font-weight="800"
+        font-style="italic"
+        letter-spacing="0.45"
+        filter="url(#shine)"
       >${escapeXml(downloadWatermark)}</text>
     </svg>
   `.trim());
@@ -396,7 +493,10 @@ function getThumbnailName(photoId) {
 }
 
 function getThumbnailUrl(photoId) {
-  return `/thumbnails/${getThumbnailName(photoId)}`;
+  return getPublicAssetUrl(
+    getThumbnailObjectKey(photoId),
+    `/thumbnails/${getThumbnailName(photoId)}`,
+  );
 }
 
 async function generateThumbnail(inputBuffer) {
@@ -466,6 +566,8 @@ async function deleteThumbnailBuffer(photoId) {
 
 async function ensurePhotoThumbnail(photo) {
   const thumbUrl = getThumbnailUrl(photo.id);
+  const uploadFileName = path.basename(photo.imageUrl);
+  const imageUrl = getPublicAssetUrl(getUploadObjectKey(uploadFileName), `/uploads/${uploadFileName}`);
 
   try {
     if (r2Enabled) {
@@ -477,17 +579,18 @@ async function ensurePhotoThumbnail(photo) {
       await stat(path.join(thumbnailsDir, getThumbnailName(photo.id)));
     }
   } catch {
-    const sourceBuffer = await readUploadBuffer(path.basename(photo.imageUrl));
+    const sourceBuffer = await readUploadBuffer(uploadFileName);
     const thumbnailBuffer = await generateThumbnail(sourceBuffer);
     await writeThumbnailBuffer(photo.id, thumbnailBuffer);
   }
 
-  if (photo.thumbUrl === thumbUrl) {
+  if (photo.thumbUrl === thumbUrl && photo.imageUrl === imageUrl) {
     return photo;
   }
 
   return {
     ...photo,
+    imageUrl,
     thumbUrl,
   };
 }
@@ -521,6 +624,26 @@ async function normalizePhotos(photos) {
   return normalized;
 }
 
+function normalizePhotoMetadata(photo) {
+  if (!photo) {
+    return photo;
+  }
+
+  const uploadFileName = path.basename(photo.imageUrl || `${photo.id}.jpg`);
+  const imageUrl = getPublicAssetUrl(getUploadObjectKey(uploadFileName), `/uploads/${uploadFileName}`);
+  const thumbUrl = getThumbnailUrl(photo.id);
+
+  if (photo.imageUrl === imageUrl && photo.thumbUrl === thumbUrl) {
+    return photo;
+  }
+
+  return {
+    ...photo,
+    imageUrl,
+    thumbUrl,
+  };
+}
+
 async function verifyAdmin(request) {
   const authorization = request.headers.authorization || '';
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
@@ -540,7 +663,9 @@ async function verifyAdmin(request) {
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(body || 'Failed to verify Google ID token.');
+    const error = new Error(body || 'Failed to verify Google ID token.');
+    error.statusCode = response.status === 400 ? 401 : response.status;
+    throw error;
   }
 
   const profile = await response.json();
@@ -636,6 +761,7 @@ async function handleUploadPhoto(request, response) {
   const id = randomUUID();
   const storageName = `${id}${extension}`;
   const now = new Date().toISOString();
+  const imageUrl = getPublicAssetUrl(getUploadObjectKey(storageName), `/uploads/${storageName}`);
 
   await writeUploadBuffer(storageName, buffer, mimeType);
   const thumbnailBuffer = await generateThumbnail(buffer);
@@ -649,7 +775,7 @@ async function handleUploadPhoto(request, response) {
     capturedAt,
     fileName: sanitizeFileName(fileName || storageName),
     mimeType,
-    imageUrl: `/uploads/${storageName}`,
+    imageUrl,
     thumbUrl: getThumbnailUrl(id),
     coordinatesText,
     mapsUrl,
@@ -746,11 +872,11 @@ async function handleDownloadPhoto(response, photoId) {
 }
 
 async function handlePublicPhotos(response) {
-  const photos = await normalizePhotos(await readPhotos());
+  const photos = (await readPhotos()).map(normalizePhotoMetadata);
   const sorted = [...photos].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const settings = await readSettings();
   sendJson(response, 200, {
-    siteTitle: settings.siteTitle || "Photo's room",
+    siteTitle: settings.siteTitle || defaultSiteTitle,
     photos: sorted,
   });
 }
@@ -770,7 +896,7 @@ async function handleUpdateSettings(request, response) {
   const current = await readSettings();
   const next = {
     ...current,
-    siteTitle: String(body.siteTitle || current.siteTitle || "Photo's room").trim(),
+    siteTitle: String(body.siteTitle || current.siteTitle || defaultSiteTitle).trim(),
   };
   await writeSettings(next);
   sendJson(response, 200, next);
@@ -798,6 +924,7 @@ async function handleMigrationPhoto(request, response) {
   const photos = await readPhotos();
   const photoId = String(meta.id || randomUUID()).trim();
   const now = new Date().toISOString();
+  const imageUrl = getPublicAssetUrl(getUploadObjectKey(imagePathName), `/uploads/${imagePathName}`);
 
   await writeUploadBuffer(imagePathName, fileBuffer, mimeType);
   const thumbnailBuffer = await generateThumbnail(fileBuffer);
@@ -811,7 +938,7 @@ async function handleMigrationPhoto(request, response) {
     capturedAt: meta.capturedAt || '',
     fileName: sanitizeFileName(fileName || imagePathName),
     mimeType,
-    imageUrl: `/uploads/${imagePathName}`,
+    imageUrl,
     thumbUrl: getThumbnailUrl(photoId),
     coordinatesText: meta.coordinatesText || '',
     mapsUrl: meta.mapsUrl || '',
@@ -836,7 +963,7 @@ async function handleMigrationSettings(request, response) {
   requireMigrationToken(request);
   const body = await readJsonBody(request);
   const next = {
-    siteTitle: String(body.siteTitle || "Photo's room").trim(),
+    siteTitle: String(body.siteTitle || defaultSiteTitle).trim(),
   };
   await writeSettings(next);
   sendJson(response, 200, next);
@@ -880,14 +1007,57 @@ async function handleStorageDebug(request, response) {
   sendJson(response, 200, {
     storageBackend: r2Enabled ? 'r2' : 'local',
     bucketName: r2Enabled ? r2BucketName : '',
+    publicBaseUrl: r2Enabled ? r2PublicBaseUrl : '',
     dataDir,
     uploadsDir,
     thumbnailsDir,
-    siteTitle: settings.siteTitle || "Photo's room",
+    siteTitle: settings.siteTitle || defaultSiteTitle,
     photoCount: photos.length,
     missingUploadCount: missingUploads.length,
     missingUploads: missingUploads.slice(0, 50),
   });
+}
+
+async function handlePublicStatus(response) {
+  let storageOk = false;
+  let storageMessage = '';
+
+  try {
+    await ensureDataFiles();
+
+    if (r2Enabled) {
+      storageOk = await objectExists(settingsObjectKey);
+      storageMessage = storageOk ? 'Cloudflare R2 연결 정상' : 'Cloudflare R2 연결 확인 필요';
+    } else {
+      await stat(photosFile);
+      storageOk = true;
+      storageMessage = '로컬 저장소 사용 중';
+    }
+  } catch (error) {
+    storageOk = false;
+    storageMessage = error instanceof Error ? error.message : '저장소 상태를 확인하지 못했습니다.';
+  }
+
+  sendJson(response, 200, {
+    ok: true,
+    render: {
+      ok: true,
+      message: 'Render API 응답 정상',
+    },
+    storage: {
+      backend: r2Enabled ? 'r2' : 'local',
+      provider: r2Enabled ? 'cloudflare-r2' : 'local',
+      ok: storageOk,
+      message: storageMessage,
+    },
+    checkedAt: new Date().toISOString(),
+  });
+}
+
+async function handleAdminStorageSummary(request, response) {
+  await verifyAdmin(request);
+  const summary = await getStorageUsageSummary();
+  sendJson(response, 200, summary);
 }
 
 async function handleStaticUpload(response, pathname) {
@@ -944,6 +1114,11 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === 'GET' && pathname === '/api/public/status') {
+      await handlePublicStatus(response);
+      return;
+    }
+
     if (request.method === 'GET' && pathname.startsWith('/api/public/photos/') && pathname.endsWith('/download')) {
       const photoId = pathname.split('/')[4];
       await handleDownloadPhoto(response, photoId);
@@ -958,6 +1133,11 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && pathname === '/api/admin/photos') {
       await verifyAdmin(request);
       await handlePublicPhotos(response);
+      return;
+    }
+
+    if (request.method === 'GET' && pathname === '/api/admin/storage-summary') {
+      await handleAdminStorageSummary(request, response);
       return;
     }
 

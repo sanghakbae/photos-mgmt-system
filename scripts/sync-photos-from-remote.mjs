@@ -58,7 +58,7 @@ async function main() {
 
   await writeFile(
     settingsPath,
-    `${JSON.stringify({ siteTitle: settings?.siteTitle || gallery?.siteTitle || "Photo's room" }, null, 2)}\n`,
+    `${JSON.stringify({ siteTitle: settings?.siteTitle || gallery?.siteTitle || '그날의 기록 (Records of the Day)' }, null, 2)}\n`,
     'utf8',
   );
 

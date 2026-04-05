@@ -39,6 +39,21 @@ export function getLocationLabel(latitude, longitude) {
   return `${Math.abs(latitude).toFixed(4)}°${ns}, ${Math.abs(longitude).toFixed(4)}°${ew}`;
 }
 
+export function createDefaultLocationText(latitude, longitude, capturedAt = '') {
+  if (typeof latitude === 'number' && typeof longitude === 'number') {
+    if (capturedAt) {
+      const date = new Date(capturedAt);
+      if (!Number.isNaN(date.getTime())) {
+        return `${getSeasonLabel(date)} 위치 기록`;
+      }
+    }
+
+    return '지도 위치 기록';
+  }
+
+  return '';
+}
+
 export function getGoogleMapsUrl(latitude, longitude) {
   if (typeof latitude !== 'number' || typeof longitude !== 'number') {
     return '';
@@ -60,4 +75,66 @@ export function getSeasonLabel(dateValue) {
     return '가을 여행';
   }
   return '겨울 여행';
+}
+
+export function isCoordinateLikeLocation(value) {
+  return /°[NS],\s*\d+(\.\d+)?°[EW]/.test(String(value || ''));
+}
+
+export function looksLikeMachineTitle(value) {
+  const title = String(value || '').trim();
+  if (!title) {
+    return true;
+  }
+
+  if (/[가-힣]/.test(title)) {
+    return false;
+  }
+
+  if (/\s/.test(title)) {
+    return false;
+  }
+
+  return /^[A-Za-z0-9_-]{12,}$/.test(title);
+}
+
+export function createDefaultPhotoTitle({ fileName = '', capturedAt = '', locationText = '' } = {}) {
+  const cleanFileName = String(fileName || '').replace(/\.[^.]+$/, '').trim();
+  const hasUsefulFileName = cleanFileName && !looksLikeMachineTitle(cleanFileName);
+  const hasUsefulLocation = locationText && !isCoordinateLikeLocation(locationText);
+
+  if (hasUsefulFileName) {
+    return cleanFileName;
+  }
+
+  if (capturedAt) {
+    const date = new Date(capturedAt);
+    if (!Number.isNaN(date.getTime())) {
+      const month = date.getMonth() + 1;
+      if (hasUsefulLocation) {
+        return `${month}월 ${locationText} 기록`;
+      }
+
+      return `${month}월의 ${getSeasonLabel(date)}`;
+    }
+  }
+
+  if (hasUsefulLocation) {
+    return `${locationText} 기록`;
+  }
+
+  return '여행 기록';
+}
+
+export function getDisplayPhotoTitle(photo) {
+  const storedTitle = String(photo?.title || '').trim();
+  if (storedTitle && !looksLikeMachineTitle(storedTitle)) {
+    return storedTitle;
+  }
+
+  return createDefaultPhotoTitle({
+    fileName: photo?.fileName,
+    capturedAt: photo?.capturedAt,
+    locationText: photo?.locationText,
+  });
 }

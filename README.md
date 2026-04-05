@@ -26,13 +26,14 @@
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 - `R2_BUCKET_NAME`
+- `R2_PUBLIC_BASE_URL`
 
 ## Render
 
 - `render.yaml` 포함
 - `HOST=0.0.0.0`
 - `DATA_DIR=/var/data`로 영속 디스크 경로 사용
-- Cloudflare R2를 쓰면 `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` 를 Render 환경변수에 넣고 `DATA_DIR` 없이도 운영 가능
+- Cloudflare R2를 쓰면 `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_BASE_URL` 를 Render 환경변수에 넣고 `DATA_DIR` 없이도 운영 가능
 - 기존 로컬 사진을 Render 디스크로 옮길 때는 `MIGRATION_TOKEN`을 설정한 뒤 `node scripts/migrate-photos-to-render.mjs <api-base-url> <migration-token>` 실행
 - Render에 있는 공개 사진을 로컬 `backend/data/uploads`로 가져오려면 `npm run sync:from-remote -- <api-base-url>` 실행
 - Render가 실제로 영속 디스크 `/var/data`를 보고 있는지 확인하려면 `GET /api/internal/debug/storage` 를 `Authorization: Bearer <MIGRATION_TOKEN>` 과 함께 호출
@@ -43,6 +44,7 @@
 ## Cloudflare R2
 
 - R2 환경변수가 모두 설정되면 사진 원본, 썸네일, `photos.json`, `settings.json` 을 모두 R2에 저장합니다
+- `R2_PUBLIC_BASE_URL` 까지 설정하면 브라우저가 Render 프록시 대신 Cloudflare 공개 URL에서 이미지와 썸네일을 직접 받아 더 빠르게 로드합니다
 - 이 모드에서는 Render free에서도 로컬 디스크 없이 동작할 수 있습니다
 - 디버그 응답 `GET /api/internal/debug/storage` 의 `storageBackend` 가 `r2` 여야 정상입니다
 
