@@ -11,6 +11,7 @@ const dataDir = process.env.DATA_DIR
   ? path.resolve(process.env.DATA_DIR)
   : path.join(__dirname, 'data');
 const uploadsDir = path.join(dataDir, 'uploads');
+const thumbnailsDir = path.join(dataDir, 'thumbnails');
 const photosFile = path.join(dataDir, 'photos.json');
 const settingsFile = path.join(dataDir, 'settings.json');
 const port = Number(process.env.PORT || 8787);
@@ -36,9 +37,12 @@ const mimeTypes = {
   '.heif': 'image/heif',
 };
 const downloadWatermark = 'totoriverce@naver.com';
+const thumbnailWidth = 640;
+const thumbnailHeight = 640;
 
 async function ensureDataFiles() {
   await mkdir(uploadsDir, { recursive: true });
+  await mkdir(thumbnailsDir, { recursive: true });
   try {
     await stat(photosFile);
   } catch {
@@ -242,6 +246,79 @@ function getExtension(mimeType, fileName) {
   return mimeTypes[ext] ? ext : '.jpg';
 }
 
+function getThumbnailName(photoId) {
+  return `${photoId}.webp`;
+}
+
+function getThumbnailUrl(photoId) {
+  return `/thumbnails/${getThumbnailName(photoId)}`;
+}
+
+async function generateThumbnail(inputBuffer, outputPath) {
+  const thumbnail = await sharp(inputBuffer, { failOn: 'none' })
+    .rotate()
+    .resize(thumbnailWidth, thumbnailHeight, {
+      fit: 'cover',
+      position: 'attention',
+      withoutEnlargement: true,
+    })
+    .webp({ quality: 78, effort: 4 })
+    .toBuffer();
+
+  await writeFile(outputPath, thumbnail);
+}
+
+async function ensurePhotoThumbnail(photo) {
+  const thumbUrl = getThumbnailUrl(photo.id);
+  const thumbnailPath = path.join(thumbnailsDir, getThumbnailName(photo.id));
+  const filePath = path.join(uploadsDir, path.basename(photo.imageUrl));
+
+  try {
+    await stat(thumbnailPath);
+  } catch {
+    const sourceBuffer = await readFile(filePath);
+    await generateThumbnail(sourceBuffer, thumbnailPath);
+  }
+
+  if (photo.thumbUrl === thumbUrl) {
+    return photo;
+  }
+
+  return {
+    ...photo,
+    thumbUrl,
+  };
+}
+
+async function normalizePhotos(photos) {
+  let metadataChanged = false;
+  let missingFilesDetected = false;
+  const normalized = [];
+
+  for (const photo of photos) {
+    try {
+      const nextPhoto = await ensurePhotoThumbnail(photo);
+      if (nextPhoto !== photo) {
+        metadataChanged = true;
+      }
+      normalized.push(nextPhoto);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        throw error;
+      }
+
+      missingFilesDetected = true;
+      console.warn(`Skipping photo with missing file: ${photo.id} (${photo.imageUrl})`);
+    }
+  }
+
+  if (metadataChanged && !missingFilesDetected) {
+    await writePhotos(normalized);
+  }
+
+  return normalized;
+}
+
 async function verifyAdmin(request) {
   const authorization = request.headers.authorization || '';
   const token = authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
@@ -360,6 +437,7 @@ async function handleUploadPhoto(request, response) {
   const now = new Date().toISOString();
 
   await writeFile(storagePath, buffer);
+  await generateThumbnail(buffer, path.join(thumbnailsDir, getThumbnailName(id)));
 
   const record = {
     id,
@@ -370,6 +448,7 @@ async function handleUploadPhoto(request, response) {
     fileName: sanitizeFileName(fileName || storageName),
     mimeType,
     imageUrl: `/uploads/${storageName}`,
+    thumbUrl: getThumbnailUrl(id),
     coordinatesText,
     mapsUrl,
     createdAt: now,
@@ -420,6 +499,7 @@ async function handleDeletePhoto(request, response, photoId) {
   }
 
   await rm(path.join(uploadsDir, path.basename(target.imageUrl)), { force: true });
+  await rm(path.join(thumbnailsDir, getThumbnailName(photoId)), { force: true });
   await writePhotos(photos.filter((photo) => photo.id !== photoId));
   sendJson(response, 200, { ok: true });
 }
@@ -465,7 +545,7 @@ async function handleDownloadPhoto(response, photoId) {
 }
 
 async function handlePublicPhotos(response) {
-  const photos = await readPhotos();
+  const photos = await normalizePhotos(await readPhotos());
   const sorted = [...photos].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const settings = await readSettings();
   sendJson(response, 200, {
@@ -520,6 +600,7 @@ async function handleMigrationPhoto(request, response) {
   const now = new Date().toISOString();
 
   await writeFile(storagePath, fileBuffer);
+  await generateThumbnail(fileBuffer, path.join(thumbnailsDir, getThumbnailName(photoId)));
 
   const record = {
     id: photoId,
@@ -530,6 +611,7 @@ async function handleMigrationPhoto(request, response) {
     fileName: sanitizeFileName(fileName || imagePathName),
     mimeType,
     imageUrl: `/uploads/${imagePathName}`,
+    thumbUrl: getThumbnailUrl(photoId),
     coordinatesText: meta.coordinatesText || '',
     mapsUrl: meta.mapsUrl || '',
     createdAt: meta.createdAt || now,
@@ -559,6 +641,46 @@ async function handleMigrationSettings(request, response) {
   sendJson(response, 200, next);
 }
 
+async function handleStorageDebug(request, response) {
+  requireMigrationToken(request);
+
+  await ensureDataFiles();
+  const photos = await readPhotos();
+  const settings = await readSettings();
+  const uploadChecks = await Promise.all(
+    photos.map(async (photo) => {
+      const uploadPath = path.join(uploadsDir, path.basename(photo.imageUrl || ''));
+      const thumbnailPath = path.join(thumbnailsDir, getThumbnailName(photo.id));
+
+      try {
+        await stat(uploadPath);
+      } catch {
+        return {
+          id: photo.id,
+          fileName: photo.fileName,
+          imageUrl: photo.imageUrl,
+          uploadMissing: true,
+          thumbnailMissing: await stat(thumbnailPath).then(() => false).catch(() => true),
+        };
+      }
+
+      return null;
+    }),
+  );
+
+  const missingUploads = uploadChecks.filter(Boolean);
+
+  sendJson(response, 200, {
+    dataDir,
+    uploadsDir,
+    thumbnailsDir,
+    siteTitle: settings.siteTitle || "Photo's room",
+    photoCount: photos.length,
+    missingUploadCount: missingUploads.length,
+    missingUploads: missingUploads.slice(0, 50),
+  });
+}
+
 async function handleStaticUpload(response, pathname) {
   const fileName = path.basename(pathname);
   const filePath = path.join(uploadsDir, fileName);
@@ -568,6 +690,22 @@ async function handleStaticUpload(response, pathname) {
     const buffer = await readFile(filePath);
     response.writeHead(200, {
       'Content-Type': mimeTypes[extension] || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    });
+    response.end(buffer);
+  } catch {
+    sendText(response, 404, 'Not found');
+  }
+}
+
+async function handleStaticThumbnail(response, pathname) {
+  const fileName = path.basename(pathname);
+  const filePath = path.join(thumbnailsDir, fileName);
+
+  try {
+    const buffer = await readFile(filePath);
+    response.writeHead(200, {
+      'Content-Type': 'image/webp',
       'Cache-Control': 'public, max-age=31536000, immutable',
     });
     response.end(buffer);
@@ -636,6 +774,11 @@ const server = createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === 'GET' && pathname === '/api/internal/debug/storage') {
+      await handleStorageDebug(request, response);
+      return;
+    }
+
     if (request.method === 'POST' && pathname === '/api/admin/photos') {
       await handleUploadPhoto(request, response);
       return;
@@ -655,6 +798,11 @@ const server = createServer(async (request, response) => {
 
     if (request.method === 'GET' && pathname.startsWith('/uploads/')) {
       await handleStaticUpload(response, pathname);
+      return;
+    }
+
+    if (request.method === 'GET' && pathname.startsWith('/thumbnails/')) {
+      await handleStaticThumbnail(response, pathname);
       return;
     }
 

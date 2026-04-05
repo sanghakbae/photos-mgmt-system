@@ -242,7 +242,12 @@ export default function GalleryPage() {
               aria-label={`${photo.title} 크게 보기`}
             >
               <div className="photo-frame">
-                <img src={photo.imageUrl} alt={photo.title} />
+                <img
+                  src={photo.thumbUrl || photo.imageUrl}
+                  alt={photo.title}
+                  loading="lazy"
+                  decoding="async"
+                />
                 <span className="photo-watermark">{DEFAULT_WATERMARK}</span>
               </div>
 
@@ -297,7 +302,11 @@ export default function GalleryPage() {
                 >
                   <X size={18} />
                 </button>
-                <img src={selectedPhoto.imageUrl} alt={selectedPhoto.title} />
+                <img
+                  src={selectedPhoto.imageUrl}
+                  alt={selectedPhoto.title}
+                  decoding="async"
+                />
                 {!selectedPhoto.isPlaceholder ? (
                   <a
                     className="secondary-button topbar-action-button photo-download-button"

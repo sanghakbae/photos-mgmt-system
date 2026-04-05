@@ -36,14 +36,23 @@ function toApiUrl(path) {
   return `${apiBaseUrl}${path}`;
 }
 
+function toAbsoluteAssetUrl(assetUrl) {
+  if (!assetUrl || /^https?:\/\//.test(assetUrl) || !apiBaseUrl) {
+    return assetUrl;
+  }
+
+  return `${apiBaseUrl}${assetUrl}`;
+}
+
 function withAssetUrl(photo) {
-  if (!photo?.imageUrl || /^https?:\/\//.test(photo.imageUrl) || !apiBaseUrl) {
+  if (!photo) {
     return photo;
   }
 
   return {
     ...photo,
-    imageUrl: `${apiBaseUrl}${photo.imageUrl}`,
+    imageUrl: toAbsoluteAssetUrl(photo.imageUrl),
+    thumbUrl: toAbsoluteAssetUrl(photo.thumbUrl),
   };
 }
 
