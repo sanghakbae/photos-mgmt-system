@@ -29,6 +29,7 @@ export default function MobileGalleryPage() {
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [slideshowVisible, setSlideshowVisible] = useState(true);
   const [slideshowSpeed, setSlideshowSpeed] = useState(5000);
+  const [isLandscapeViewport, setIsLandscapeViewport] = useState(() => isMobileLandscapeViewport());
   const [systemStatus, setSystemStatus] = useState({
     loading: true,
     renderOk: false,
@@ -128,6 +129,9 @@ export default function MobileGalleryPage() {
 
   useEffect(() => {
     function syncLandscapeSlideshow() {
+      const nextLandscape = isMobileLandscapeViewport();
+      setIsLandscapeViewport(nextLandscape);
+
       if (isMobileLandscapeViewport()) {
         setSlideshowVisible(true);
       }
@@ -196,7 +200,7 @@ export default function MobileGalleryPage() {
       : 'status-pill status-pill-disconnected mobile-public-status';
 
   return (
-    <div className="mobile-public-shell">
+    <div className={`mobile-public-shell ${isLandscapeViewport ? 'is-landscape' : ''}`}>
       <header className="mobile-public-header">
         <div>
           <p className="eyebrow">Mobile Public Gallery</p>

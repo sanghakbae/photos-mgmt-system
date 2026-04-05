@@ -129,8 +129,26 @@ a {
   overflow: hidden;
 }
 
+.mobile-public-shell.is-landscape .mobile-public-header,
+.mobile-public-shell.is-landscape .mobile-public-toolbar,
+.mobile-public-shell.is-landscape .mobile-public-feed,
+.mobile-public-shell.is-landscape .error-banner,
+.mobile-public-shell.is-landscape .admin-loading {
+  display: none;
+}
+
+.mobile-public-shell.is-landscape .mobile-public-slideshow {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  margin-top: 0;
+  border: 0;
+  border-radius: 0;
+}
+
 .mobile-public-slideshow-stage {
   position: relative;
+  min-height: 100dvh;
 }
 
 .mobile-public-slideshow-photo {
@@ -146,6 +164,10 @@ a {
   width: 100%;
   height: min(42vh, 320px);
   object-fit: cover;
+}
+
+.mobile-public-shell.is-landscape .mobile-public-slideshow-image {
+  height: 100dvh;
 }
 
 .mobile-public-slideshow-overlay {
@@ -190,6 +212,16 @@ a {
   justify-content: space-between;
   gap: 8px;
   padding: 0 10px 10px;
+}
+
+.mobile-public-shell.is-landscape .mobile-public-slideshow-controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, transparent, rgba(9, 10, 14, 0.82));
 }
 
 .mobile-public-card {
