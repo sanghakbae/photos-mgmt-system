@@ -32,7 +32,6 @@
 
 - `render.yaml` 포함
 - `HOST=0.0.0.0`
-- `DATA_DIR=/var/data`로 영속 디스크 경로 사용
 - Cloudflare R2를 쓰면 `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_BASE_URL` 를 Render 환경변수에 넣고 `DATA_DIR` 없이도 운영 가능
 - 기존 로컬 사진을 Render 디스크로 옮길 때는 `MIGRATION_TOKEN`을 설정한 뒤 `node scripts/migrate-photos-to-render.mjs <api-base-url> <migration-token>` 실행
 - Render에 있는 공개 사진을 로컬 `backend/data/uploads`로 가져오려면 `npm run sync:from-remote -- <api-base-url>` 실행
@@ -53,3 +52,10 @@
 - `main` 브랜치 푸시 시 GitHub Actions로 배포
 - 저장소 Settings > Pages 에서 source를 `GitHub Actions`로 설정
 - 프론트 빌드 시 `VITE_API_BASE_URL`을 Render 백엔드 URL로 지정
+
+## GitHub Actions
+
+- `.github/workflows/deploy-pages.yml`: GitHub Pages 빌드/배포
+- `.github/workflows/deploy-render.yml`: `main` 푸시 시 Render deploy hook 호출
+- GitHub 저장소 `Settings > Secrets and variables > Actions` 에 `RENDER_DEPLOY_HOOK_URL` secret 이 필요함
+- 이 secret 을 넣으면 GitHub `main` push 뒤 Render도 자동으로 다시 배포됨
