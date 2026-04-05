@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2a3444" />
+      <stop offset="60%" stop-color="#1b1520" />
+      <stop offset="100%" stop-color="#d67d52" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="120" fill="url(#bg)" />
+  <circle cx="374" cy="144" r="42" fill="#fff0de" opacity="0.88" />
+  <path d="M64 356C134 296 182 286 238 318C276 340 320 378 448 318V448H64Z" fill="#171d27" />
+  <path d="M64 388C146 332 214 346 278 388C322 416 374 432 448 394V448H64Z" fill="#0f141b" />
+  <text x="76" y="174" fill="#fff7ef" font-family="KoPub Dotum, Apple SD Gothic Neo, sans-serif" font-size="42">그날의</text>
+  <text x="76" y="226" fill="#fff7ef" font-family="KoPub Dotum, Apple SD Gothic Neo, sans-serif" font-size="42">기록</text>
+</svg>

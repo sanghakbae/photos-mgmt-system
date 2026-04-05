@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="120" fill="#14181f" />
+  <circle cx="374" cy="144" r="42" fill="#f1a06d" />
+  <path d="M64 356C134 296 182 286 238 318C276 340 320 378 448 318V448H64Z" fill="#f3ece5" />
+  <path d="M64 388C146 332 214 346 278 388C322 416 374 432 448 394V448H64Z" fill="#b87a57" />
+  <text x="76" y="174" fill="#f3ece5" font-family="KoPub Dotum, Apple SD Gothic Neo, sans-serif" font-size="42">그날의</text>
+  <text x="76" y="226" fill="#f3ece5" font-family="KoPub Dotum, Apple SD Gothic Neo, sans-serif" font-size="42">기록</text>
+</svg>
