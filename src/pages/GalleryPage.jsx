@@ -23,6 +23,21 @@ const SLIDESHOW_SPEED_OPTIONS = [
   { label: '10초', value: 10000 },
 ];
 
+function isMobileLandscapeViewport() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const isLandscape = window.innerWidth > window.innerHeight;
+  const isMobileSized = Math.min(window.innerWidth, window.innerHeight) <= 900;
+  const isTouchPrimary =
+    typeof window.matchMedia === 'function'
+      ? window.matchMedia('(hover: none) and (pointer: coarse)').matches
+      : false;
+
+  return isLandscape && (isMobileSized || isTouchPrimary);
+}
+
 const starterMemories = [
   {
     id: 'starter-1',
@@ -60,6 +75,8 @@ export default function GalleryPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [selectedPhotoId, setSelectedPhotoId] = useState(null);
+  const [modalImageSrc, setModalImageSrc] = useState('');
+  const [modalImageLoading, setModalImageLoading] = useState(false);
   const [slideshowSpeed, setSlideshowSpeed] = useState(5000);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [slideshowVisible, setSlideshowVisible] = useState(true);
@@ -237,6 +254,45 @@ export default function GalleryPage() {
     setSelectedPhotoId(displayPhotos[nextIndex]?.id ?? null);
   }
 
+  useEffect(() => {
+    if (!selectedPhoto) {
+      setModalImageSrc('');
+      setModalImageLoading(false);
+      return;
+    }
+
+    const previewSrc = selectedPhoto.thumbUrl || selectedPhoto.imageUrl;
+    setModalImageSrc(previewSrc);
+    setModalImageLoading(Boolean(selectedPhoto.imageUrl && selectedPhoto.imageUrl !== previewSrc));
+
+    if (!selectedPhoto.imageUrl || selectedPhoto.imageUrl === previewSrc) {
+      return;
+    }
+
+    let active = true;
+    const nextImage = new Image();
+    nextImage.onload = () => {
+      if (!active) {
+        return;
+      }
+
+      setModalImageSrc(selectedPhoto.imageUrl);
+      setModalImageLoading(false);
+    };
+    nextImage.onerror = () => {
+      if (!active) {
+        return;
+      }
+
+      setModalImageLoading(false);
+    };
+    nextImage.src = selectedPhoto.imageUrl;
+
+    return () => {
+      active = false;
+    };
+  }, [selectedPhoto]);
+
   function moveSlide(direction) {
     if (!hasMultipleSlides) {
       return;
@@ -280,27 +336,24 @@ export default function GalleryPage() {
   }, [displayPhotos, hasMultipleDisplayPhotos, selectedPhotoId, selectedPhotoIndex]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    if (typeof window === 'undefined') {
       return undefined;
     }
 
-    const mediaQuery = window.matchMedia('(max-width: 720px) and (orientation: landscape)');
-
-    function handleLandscapeChange(event) {
-      if (event.matches) {
+    function syncLandscapeSlideshow() {
+      if (isMobileLandscapeViewport()) {
         setSlideshowVisible(true);
       }
     }
 
-    handleLandscapeChange(mediaQuery);
+    syncLandscapeSlideshow();
+    window.addEventListener('resize', syncLandscapeSlideshow);
+    window.addEventListener('orientationchange', syncLandscapeSlideshow);
 
-    if (typeof mediaQuery.addEventListener === 'function') {
-      mediaQuery.addEventListener('change', handleLandscapeChange);
-      return () => mediaQuery.removeEventListener('change', handleLandscapeChange);
-    }
-
-    mediaQuery.addListener(handleLandscapeChange);
-    return () => mediaQuery.removeListener(handleLandscapeChange);
+    return () => {
+      window.removeEventListener('resize', syncLandscapeSlideshow);
+      window.removeEventListener('orientationchange', syncLandscapeSlideshow);
+    };
   }, []);
 
   useEffect(() => {
@@ -537,10 +590,16 @@ export default function GalleryPage() {
                     </button>
                   ) : null}
                   <img
-                    src={selectedPhoto.imageUrl}
+                    src={modalImageSrc || selectedPhoto.imageUrl}
                     alt={getDisplayPhotoTitle(selectedPhoto)}
                     decoding="async"
                   />
+                  {modalImageLoading ? (
+                    <div className="photo-modal-loading-indicator">
+                      <LoaderCircle size={18} className="spin" />
+                      원본 불러오는 중
+                    </div>
+                  ) : null}
                   {hasMultipleDisplayPhotos ? (
                     <button
                       type="button"

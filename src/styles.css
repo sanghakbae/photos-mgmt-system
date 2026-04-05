@@ -772,6 +772,22 @@ a {
   justify-self: start;
 }
 
+.photo-modal-loading-indicator {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: rgba(10, 12, 16, 0.72);
+  color: #f3ece5;
+  backdrop-filter: blur(10px);
+}
+
 .slideshow-nav-button,
 .photo-nav-button {
   position: absolute;
@@ -973,13 +989,48 @@ a {
 }
 
 .admin-photo-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
   aspect-ratio: 1.4 / 1;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0.02) 100%),
+    rgba(11, 14, 19, 0.82);
 }
 
 .admin-photo-preview img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.admin-preview-fallback {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.admin-preview-fallback strong {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  letter-spacing: 0.08em;
+}
+
+.admin-preview-fallback span {
+  font-size: 0.78rem;
+  line-height: 1.35;
 }
 
 .admin-photo-fields {

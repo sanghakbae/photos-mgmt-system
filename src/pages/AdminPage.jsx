@@ -48,6 +48,15 @@ function isSupportedUploadFile(file) {
   return /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name ?? '');
 }
 
+function canRenderPreviewInBrowser(file) {
+  const mimeType = (file.type ?? '').toLowerCase();
+  if (mimeType === 'image/heic' || mimeType === 'image/heif') {
+    return false;
+  }
+
+  return !/\.(heic|heif)$/i.test(file.name ?? '');
+}
+
 const uploadConcurrency = 3;
 const UPLOAD_RECOVERY_KEY = 'photo-upload-recovery';
 const SIMILAR_HASH_DISTANCE = 8;
@@ -712,7 +721,8 @@ export default function AdminPage() {
           return {
             id: `${file.name}-${sha256.slice(0, 8)}`,
             file,
-            previewUrl: URL.createObjectURL(file),
+            previewUrl: canRenderPreviewInBrowser(file) ? URL.createObjectURL(file) : '',
+            previewUnavailable: !canRenderPreviewInBrowser(file),
             sha256,
             visualHash,
             include: !existingHashes.has(sha256),
@@ -1182,10 +1192,17 @@ export default function AdminPage() {
                 {pendingUploadBatch.items.map((item) => (
                   <article className="admin-photo-card" key={item.id}>
                     <div className="admin-photo-preview">
-                      <img
-                        src={item.previewUrl}
-                        alt={item.meta.title || item.file.name}
-                      />
+                      {item.previewUnavailable ? (
+                        <div className="admin-preview-fallback">
+                          <strong>{(item.file.name.split('.').pop() || 'image').toUpperCase()}</strong>
+                          <span>브라우저 미리보기 불가</span>
+                        </div>
+                      ) : (
+                        <img
+                          src={item.previewUrl}
+                          alt={item.meta.title || item.file.name}
+                        />
+                      )}
                     </div>
                     <div className="admin-photo-fields">
                       <div className="admin-photo-meta">
