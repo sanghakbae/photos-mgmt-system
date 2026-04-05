@@ -1,10 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarDays, Download, Images, LoaderCircle, MapPin, MessageSquareText, Search, X } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, Download, Images, LoaderCircle, MapPin, MessageSquareText, Search, X } from 'lucide-react';
 import { getPhotoDownloadUrl, getPublicPhotos, getPublicSystemStatus } from '../lib/galleryApi';
 import { formatDate, getDisplayPhotoTitle } from '../lib/photoUtils';
 
 const PUBLIC_GALLERY_REFRESH_MS = 10000;
 const STATUS_REFRESH_MS = 15000;
+const SLIDESHOW_SPEED_OPTIONS = [
+  { label: '2초', value: 2000 },
+  { label: '5초', value: 5000 },
+  { label: '10초', value: 10000 },
+];
+
+function isMobileLandscapeViewport() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  return window.innerWidth > window.innerHeight;
+}
 
 export default function MobileGalleryPage() {
   const [photos, setPhotos] = useState([]);
@@ -13,6 +26,9 @@ export default function MobileGalleryPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+  const [slideshowVisible, setSlideshowVisible] = useState(true);
+  const [slideshowSpeed, setSlideshowSpeed] = useState(5000);
   const [systemStatus, setSystemStatus] = useState({
     loading: true,
     renderOk: false,
@@ -110,6 +126,23 @@ export default function MobileGalleryPage() {
     return () => window.removeEventListener('keydown', handleKeydown);
   }, []);
 
+  useEffect(() => {
+    function syncLandscapeSlideshow() {
+      if (isMobileLandscapeViewport()) {
+        setSlideshowVisible(true);
+      }
+    }
+
+    syncLandscapeSlideshow();
+    window.addEventListener('resize', syncLandscapeSlideshow);
+    window.addEventListener('orientationchange', syncLandscapeSlideshow);
+
+    return () => {
+      window.removeEventListener('resize', syncLandscapeSlideshow);
+      window.removeEventListener('orientationchange', syncLandscapeSlideshow);
+    };
+  }, []);
+
   const displayPhotos = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     if (!keyword) {
@@ -124,6 +157,37 @@ export default function MobileGalleryPage() {
       return values.includes(keyword);
     });
   }, [photos, search]);
+
+  const selectedPhotoIndex = useMemo(() => {
+    if (!selectedPhoto) {
+      return -1;
+    }
+    return displayPhotos.findIndex((photo) => photo.id === selectedPhoto.id);
+  }, [displayPhotos, selectedPhoto]);
+
+  const hasMultiplePhotos = displayPhotos.length > 1;
+  const activeSlide = displayPhotos[activeSlideIndex] ?? displayPhotos[0] ?? null;
+
+  useEffect(() => {
+    if (!displayPhotos.length) {
+      setActiveSlideIndex(0);
+      return;
+    }
+
+    setActiveSlideIndex((current) => Math.min(current, displayPhotos.length - 1));
+  }, [displayPhotos]);
+
+  useEffect(() => {
+    if (displayPhotos.length < 2 || !slideshowVisible) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setActiveSlideIndex((current) => (current + 1) % displayPhotos.length);
+    }, slideshowSpeed);
+
+    return () => window.clearInterval(intervalId);
+  }, [displayPhotos.length, slideshowSpeed, slideshowVisible]);
 
   const statusClassName = systemStatus.loading
     ? 'status-pill status-pill-pending mobile-public-status'
@@ -163,10 +227,88 @@ export default function MobileGalleryPage() {
             onChange={(event) => setSearch(event.target.value)}
           />
         </label>
+        <div className="mobile-public-toolbar-actions">
+          <button
+            type="button"
+            className="secondary-button topbar-action-button"
+            onClick={() => setSlideshowVisible((current) => !current)}
+          >
+            {slideshowVisible ? '슬라이드 숨기기' : '슬라이드 보기'}
+          </button>
+        </div>
       </section>
 
       {error ? <p className="error-banner">{error}</p> : null}
       {loading ? <p className="admin-loading">사진 목록을 불러오는 중입니다.</p> : null}
+
+      {slideshowVisible && activeSlide ? (
+        <section className="mobile-public-slideshow">
+          <div className="mobile-public-slideshow-stage">
+            <button
+              type="button"
+              className="mobile-public-slideshow-photo"
+              onPointerUp={() => setSelectedPhoto(activeSlide)}
+              onClick={(event) => {
+                if (event.detail === 0) {
+                  setSelectedPhoto(activeSlide);
+                }
+              }}
+            >
+              <img
+                src={activeSlide.imageUrl || activeSlide.thumbUrl}
+                alt={getDisplayPhotoTitle(activeSlide)}
+                className="mobile-public-slideshow-image"
+              />
+              <div className="mobile-public-slideshow-overlay">
+                <p className="eyebrow">Slideshow</p>
+                <h2>{getDisplayPhotoTitle(activeSlide)}</h2>
+                <p>{activeSlide.locationText || '위치 정보 없음'}</p>
+              </div>
+            </button>
+            {hasMultiplePhotos ? (
+              <>
+                <button
+                  type="button"
+                  className="icon-button mobile-public-slideshow-nav mobile-public-slideshow-nav-left"
+                  onClick={() => {
+                    setActiveSlideIndex((current) => (current - 1 + displayPhotos.length) % displayPhotos.length);
+                  }}
+                  aria-label="이전 슬라이드"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <button
+                  type="button"
+                  className="icon-button mobile-public-slideshow-nav mobile-public-slideshow-nav-right"
+                  onClick={() => {
+                    setActiveSlideIndex((current) => (current + 1) % displayPhotos.length);
+                  }}
+                  aria-label="다음 슬라이드"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </>
+            ) : null}
+          </div>
+          <div className="mobile-public-slideshow-controls">
+            <div className="slideshow-speed-selector" role="radiogroup" aria-label="모바일 슬라이드쇼 속도">
+              {SLIDESHOW_SPEED_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={`slideshow-speed-button ${slideshowSpeed === option.value ? 'is-active' : ''}`}
+                  onClick={() => setSlideshowSpeed(option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <div className="slideshow-position" aria-live="polite">
+              {displayPhotos.length > 0 ? `${activeSlideIndex + 1} / ${displayPhotos.length}` : '0 / 0'}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <main className="mobile-public-feed">
         {displayPhotos.map((photo) => (
@@ -230,8 +372,6 @@ export default function MobileGalleryPage() {
         >
           <section
             className="mobile-public-modal"
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
             aria-label={`${getDisplayPhotoTitle(selectedPhoto)} 사진 크게 보기`}
           >
             <button
@@ -244,12 +384,38 @@ export default function MobileGalleryPage() {
             </button>
 
             <div className="mobile-public-modal-image-wrap">
+              {hasMultiplePhotos ? (
+                <button
+                  type="button"
+                  className="icon-button mobile-public-modal-nav mobile-public-modal-nav-left"
+                  onClick={() => {
+                    const nextIndex = (selectedPhotoIndex - 1 + displayPhotos.length) % displayPhotos.length;
+                    setSelectedPhoto(displayPhotos[nextIndex] ?? null);
+                  }}
+                  aria-label="이전 사진"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+              ) : null}
               <img
                 className="mobile-public-modal-image"
                 src={selectedPhoto.imageUrl || selectedPhoto.thumbUrl}
                 alt={getDisplayPhotoTitle(selectedPhoto)}
                 decoding="async"
               />
+              {hasMultiplePhotos ? (
+                <button
+                  type="button"
+                  className="icon-button mobile-public-modal-nav mobile-public-modal-nav-right"
+                  onClick={() => {
+                    const nextIndex = (selectedPhotoIndex + 1) % displayPhotos.length;
+                    setSelectedPhoto(displayPhotos[nextIndex] ?? null);
+                  }}
+                  aria-label="다음 사진"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              ) : null}
             </div>
 
             <div className="mobile-public-modal-copy">
