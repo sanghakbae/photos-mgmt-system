@@ -89,6 +89,7 @@ export default function GalleryPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [selectedPhotoId, setSelectedPhotoId] = useState(null);
+  const [selectedPhotoState, setSelectedPhotoState] = useState(null);
   const [modalImageSrc, setModalImageSrc] = useState('');
   const [modalImageLoading, setModalImageLoading] = useState(false);
   const [slideshowSpeed, setSlideshowSpeed] = useState(5000);
@@ -175,18 +176,18 @@ export default function GalleryPage() {
     loadSystemStatus();
 
     const intervalId = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && !selectedPhotoId) {
         loadPublicPhotos({ silent: true });
       }
     }, PUBLIC_GALLERY_REFRESH_MS);
     const statusIntervalId = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && !selectedPhotoId) {
         loadSystemStatus();
       }
     }, STATUS_REFRESH_MS);
 
     function handleVisibilityChange() {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && !selectedPhotoId) {
         loadPublicPhotos({ silent: true });
         loadSystemStatus();
       }
@@ -200,7 +201,7 @@ export default function GalleryPage() {
       window.clearInterval(statusIntervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [selectedPhotoId]);
 
   const displayPhotos = useMemo(() => {
     const source = photos.length > 0 ? photos : starterMemories;
@@ -241,9 +242,13 @@ export default function GalleryPage() {
   const activeSlide = slideshowPhotos[activeSlideIndex] ?? slideshowPhotos[0] ?? null;
 
   const selectedPhoto = useMemo(() => {
+    if (!selectedPhotoId) {
+      return null;
+    }
+
     const source = photos.length > 0 ? photos : starterMemories;
-    return source.find((photo) => photo.id === selectedPhotoId) ?? null;
-  }, [photos, selectedPhotoId]);
+    return source.find((photo) => photo.id === selectedPhotoId) ?? selectedPhotoState ?? null;
+  }, [photos, selectedPhotoId, selectedPhotoState]);
 
   const selectedPhotoIndex = useMemo(() => {
     if (!selectedPhotoId) {
@@ -262,10 +267,11 @@ export default function GalleryPage() {
       : 'status-pill status-pill-disconnected topbar-action-button topbar-status-pill';
 
   function openPhoto(photo, event) {
-    event.preventDefault();
-    event.stopPropagation();
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
 
     const previewSrc = photo.thumbUrl || photo.imageUrl || '';
+    setSelectedPhotoState(photo);
     setSelectedPhotoId(photo.id);
     setModalImageSrc(previewSrc);
     setModalImageLoading(Boolean(photo.imageUrl && photo.imageUrl !== previewSrc));
@@ -275,6 +281,9 @@ export default function GalleryPage() {
 
   function closePhoto() {
     setSelectedPhotoId(null);
+    setSelectedPhotoState(null);
+    setModalImageSrc('');
+    setModalImageLoading(false);
   }
 
   function moveSelectedPhoto(direction) {
@@ -325,6 +334,17 @@ export default function GalleryPage() {
       active = false;
     };
   }, [selectedPhoto]);
+
+  useEffect(() => {
+    if (!selectedPhotoId || !photos.length) {
+      return;
+    }
+
+    const latestPhoto = photos.find((photo) => photo.id === selectedPhotoId);
+    if (latestPhoto) {
+      setSelectedPhotoState(latestPhoto);
+    }
+  }, [photos, selectedPhotoId]);
 
   useEffect(() => {
     if (!displayPhotos.length || selectedPhotoIndex < 0) {
@@ -420,6 +440,12 @@ export default function GalleryPage() {
       window.removeEventListener('orientationchange', syncLandscapeSlideshow);
     };
   }, []);
+
+  useEffect(() => {
+    if (isMobileExperience && isMobileLandscapeViewport()) {
+      setSlideshowVisible(true);
+    }
+  }, [isMobileExperience]);
 
   useEffect(() => {
     if (!slideshowPhotos.length) {
@@ -521,7 +547,12 @@ export default function GalleryPage() {
             <button
               type="button"
               className="slideshow-photo-button"
-              onClick={(event) => openPhoto(activeSlide, event)}
+              onPointerUp={(event) => openPhoto(activeSlide, event)}
+              onClick={(event) => {
+                if (event.detail === 0) {
+                  openPhoto(activeSlide, event);
+                }
+              }}
               aria-label={`${getDisplayPhotoTitle(activeSlide)} 슬라이드 사진 크게 보기`}
             >
               <img
@@ -617,7 +648,12 @@ export default function GalleryPage() {
             <button
               type="button"
               className="photo-open-button"
-              onClick={(event) => openPhoto(photo, event)}
+              onPointerUp={(event) => openPhoto(photo, event)}
+              onClick={(event) => {
+                if (event.detail === 0) {
+                  openPhoto(photo, event);
+                }
+              }}
               aria-label={`${getDisplayPhotoTitle(photo)} 크게 보기`}
             >
               <div className="photo-frame">
