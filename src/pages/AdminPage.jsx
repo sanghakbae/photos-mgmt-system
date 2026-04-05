@@ -916,12 +916,12 @@ export default function AdminPage() {
 
   async function handleDeleteSelectedSimilar() {
     if (selectedSimilarIds.length === 0) {
-      setError('삭제할 유사 사진을 먼저 선택해 주세요.');
+      setError('삭제할 파일을 먼저 선택해 주세요.');
       return;
     }
 
     setDeletingSimilar(true);
-    setError(`유사 사진 ${selectedSimilarIds.length}개를 제외하는 중입니다...`);
+    setError(`선택한 파일 ${selectedSimilarIds.length}개를 삭제하는 중입니다...`);
 
     try {
       for (const photoId of selectedSimilarIds) {
@@ -936,14 +936,14 @@ export default function AdminPage() {
         }))
         .filter((group) => group.items.length > 1));
       setSelectedSimilarIds([]);
-      setError('선택한 유사 사진을 제외했습니다.');
+      setError('선택한 파일을 삭제했습니다.');
     } catch (deleteError) {
       console.error(deleteError);
       if (isAuthFailure(deleteError)) {
         handleAuthExpired();
         return;
       }
-      setError(deleteError instanceof Error ? deleteError.message : '유사 사진 삭제에 실패했습니다.');
+      setError(deleteError instanceof Error ? deleteError.message : '선택한 파일 삭제에 실패했습니다.');
     } finally {
       setDeletingSimilar(false);
     }
@@ -1273,7 +1273,7 @@ export default function AdminPage() {
                     }}
                   >
                     <CheckSquare size={16} />
-                    후보 전체 선택
+                    삭제 후보 전체 선택
                   </button>
                   <button
                     type="button"
@@ -1290,12 +1290,12 @@ export default function AdminPage() {
                     disabled={deletingSimilar || selectedSimilarIds.length === 0}
                   >
                     {deletingSimilar ? <LoaderCircle size={16} className="spin" /> : <Trash2 size={16} />}
-                    {deletingSimilar ? `제외 중... (${selectedSimilarIds.length})` : `선택한 후보 제외 (${selectedSimilarIds.length})`}
+                    {deletingSimilar ? `삭제 중... (${selectedSimilarIds.length})` : `선택한 파일 삭제 (${selectedSimilarIds.length})`}
                   </button>
                 </div>
               </div>
               <p className="admin-progress-detail-text">
-                각 묶음의 첫 사진을 기준으로 비슷한 사진을 찾았습니다. 유지할 사진만 남기고 나머지를 선택해서 제외할 수 있습니다.
+                각 묶음의 첫 사진은 비교 기준입니다. 삭제할 파일만 직접 선택한 뒤 한 번에 삭제할 수 있습니다.
               </p>
               {similarGroups.map((group, groupIndex) => (
                 <div className="admin-card-actions" key={group.id}>
@@ -1328,7 +1328,7 @@ export default function AdminPage() {
                                 disabled
                               >
                                 <Square size={16} />
-                                유지 권장
+                                비교 기준
                               </button>
                             </div>
                           </article>
@@ -1356,7 +1356,7 @@ export default function AdminPage() {
                                 onClick={() => toggleSimilarSelection(item.id)}
                               >
                                 {checked ? <CheckSquare size={16} /> : <Square size={16} />}
-                                {checked ? '제외 선택됨' : '이 사진 제외'}
+                                {checked ? '삭제 선택됨' : '이 파일 삭제'}
                               </button>
                             </div>
                           </article>

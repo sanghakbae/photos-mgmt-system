@@ -23,6 +23,22 @@ const SLIDESHOW_SPEED_OPTIONS = [
   { label: '10초', value: 10000 },
 ];
 
+function detectMobileExperience() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const userAgent = navigator.userAgent || '';
+  const agentMobile = /Android|iPhone|iPad|iPod|Mobile|CriOS|FxiOS|SamsungBrowser/i.test(userAgent);
+  const viewportMobile = window.innerWidth <= 900;
+  const coarsePointer =
+    typeof window.matchMedia === 'function'
+      ? window.matchMedia('(hover: none) and (pointer: coarse)').matches
+      : false;
+
+  return agentMobile || (viewportMobile && coarsePointer);
+}
+
 function isMobileLandscapeViewport() {
   if (typeof window === 'undefined') {
     return false;
@@ -78,6 +94,7 @@ export default function GalleryPage() {
   const [slideshowSpeed, setSlideshowSpeed] = useState(5000);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [slideshowVisible, setSlideshowVisible] = useState(true);
+  const [isMobileExperience, setIsMobileExperience] = useState(() => detectMobileExperience());
   const [systemStatus, setSystemStatus] = useState({
     loading: true,
     renderOk: false,
@@ -381,17 +398,24 @@ export default function GalleryPage() {
       return undefined;
     }
 
+    function syncMobileExperience() {
+      setIsMobileExperience(detectMobileExperience());
+    }
+
     function syncLandscapeSlideshow() {
       if (isMobileLandscapeViewport()) {
         setSlideshowVisible(true);
       }
     }
 
+    syncMobileExperience();
     syncLandscapeSlideshow();
+    window.addEventListener('resize', syncMobileExperience);
     window.addEventListener('resize', syncLandscapeSlideshow);
     window.addEventListener('orientationchange', syncLandscapeSlideshow);
 
     return () => {
+      window.removeEventListener('resize', syncMobileExperience);
       window.removeEventListener('resize', syncLandscapeSlideshow);
       window.removeEventListener('orientationchange', syncLandscapeSlideshow);
     };
@@ -426,38 +450,69 @@ export default function GalleryPage() {
       <div className="background-orb orb-right" />
 
       <header className="hero">
-        <div className="gallery-topbar">
-          <div className="gallery-topbar-copy">
-            <p className="eyebrow">Public Gallery</p>
-            <h1>그날의 기록 (Records of the Day)</h1>
-            <p className="gallery-topbar-meta">
-              공개 사진 {stats.total}장
-              <span className="gallery-topbar-divider">·</span>
-              최근 촬영 {stats.latest}
-            </p>
-          </div>
-
-          <div className="gallery-topbar-actions">
-            <div className={systemStatusClassName} title={systemStatus.message}>
-              {systemStatus.loading ? <LoaderCircle size={16} className="spin" /> : <Images size={16} />}
-              {systemStatus.loading
-                ? '신호 확인 중'
-                : systemStatus.renderOk && systemStatus.storageOk
-                  ? `정상 연결 · ${systemStatus.storageBackend === 'r2' ? 'Cloudflare' : 'Local'}`
-                  : '연결 이상'}
+        {isMobileExperience ? (
+          <div className="mobile-gallery-header">
+            <div className="mobile-gallery-copy">
+              <p className="eyebrow">Mobile Public Gallery</p>
+              <h1>그날의 기록</h1>
+              <p className="gallery-topbar-meta">
+                공개 사진 {stats.total}장
+                <span className="gallery-topbar-divider">·</span>
+                최근 촬영 {stats.latest}
+              </p>
             </div>
-            <button
-              type="button"
-              className="secondary-button topbar-action-button"
-              onClick={() => setSlideshowVisible((current) => !current)}
-            >
-              {slideshowVisible ? '슬라이드쇼 숨기기' : '슬라이드쇼 보기'}
-            </button>
-            <Link className="secondary-button topbar-action-button" to="/admin">
-              관리자
-            </Link>
+            <div className="mobile-gallery-actions">
+              <div className={systemStatusClassName} title={systemStatus.message}>
+                {systemStatus.loading ? <LoaderCircle size={16} className="spin" /> : <Images size={16} />}
+                {systemStatus.loading
+                  ? '신호 확인 중'
+                  : systemStatus.renderOk && systemStatus.storageOk
+                    ? `정상 연결 · ${systemStatus.storageBackend === 'r2' ? 'Cloudflare' : 'Local'}`
+                    : '연결 이상'}
+              </div>
+              <button
+                type="button"
+                className="secondary-button topbar-action-button"
+                onClick={() => setSlideshowVisible((current) => !current)}
+              >
+                {slideshowVisible ? '슬라이드 숨기기' : '슬라이드 보기'}
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="gallery-topbar">
+            <div className="gallery-topbar-copy">
+              <p className="eyebrow">Public Gallery</p>
+              <h1>그날의 기록 (Records of the Day)</h1>
+              <p className="gallery-topbar-meta">
+                공개 사진 {stats.total}장
+                <span className="gallery-topbar-divider">·</span>
+                최근 촬영 {stats.latest}
+              </p>
+            </div>
+
+            <div className="gallery-topbar-actions">
+              <div className={systemStatusClassName} title={systemStatus.message}>
+                {systemStatus.loading ? <LoaderCircle size={16} className="spin" /> : <Images size={16} />}
+                {systemStatus.loading
+                  ? '신호 확인 중'
+                  : systemStatus.renderOk && systemStatus.storageOk
+                    ? `정상 연결 · ${systemStatus.storageBackend === 'r2' ? 'Cloudflare' : 'Local'}`
+                    : '연결 이상'}
+              </div>
+              <button
+                type="button"
+                className="secondary-button topbar-action-button"
+                onClick={() => setSlideshowVisible((current) => !current)}
+              >
+                {slideshowVisible ? '슬라이드쇼 숨기기' : '슬라이드쇼 보기'}
+              </button>
+              <Link className="secondary-button topbar-action-button" to="/admin">
+                관리자
+              </Link>
+            </div>
+          </div>
+        )}
       </header>
 
       {slideshowVisible && activeSlide ? (
@@ -530,7 +585,7 @@ export default function GalleryPage() {
         </section>
       ) : null}
 
-      <section className="toolbar">
+      <section className={isMobileExperience ? 'toolbar mobile-gallery-toolbar' : 'toolbar'}>
         <label className="search-field" htmlFor="photo-search">
           <Search size={18} />
           <input
@@ -542,15 +597,17 @@ export default function GalleryPage() {
           />
         </label>
 
-        <div className="toolbar-info">
-          <Images size={18} />
-          <span>공개 갤러리입니다. 관리자만 업로드와 편집이 가능합니다.</span>
-        </div>
+        {!isMobileExperience ? (
+          <div className="toolbar-info">
+            <Images size={18} />
+            <span>공개 갤러리입니다. 관리자만 업로드와 편집이 가능합니다.</span>
+          </div>
+        ) : null}
       </section>
 
       {error ? <p className="error-banner">{error}</p> : null}
 
-      <main className="gallery-grid">
+      <main className={isMobileExperience ? 'gallery-grid mobile-gallery-grid' : 'gallery-grid'}>
         {displayPhotos.map((photo, index) => (
           <article
             className={`photo-card ${photo.isPlaceholder ? 'placeholder-card' : ''}`}

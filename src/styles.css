@@ -129,6 +129,23 @@ a {
   border-radius: 6px;
 }
 
+.mobile-gallery-header {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(24, 28, 35, 0.9), rgba(18, 21, 28, 0.82));
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow);
+}
+
+.mobile-gallery-copy h1 {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.08;
+}
+
 .gallery-topbar-copy h1 {
   margin: 0;
   font-size: 0.88rem;
@@ -153,6 +170,13 @@ a {
   justify-content: flex-end;
   gap: 6px;
   min-width: 0;
+}
+
+.mobile-gallery-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .topbar-action-button {
@@ -471,6 +495,10 @@ a {
   line-height: 1.2;
 }
 
+.mobile-gallery-toolbar {
+  gap: 0;
+}
+
 .error-banner {
   width: 100%;
   margin: 8px auto 0;
@@ -485,6 +513,11 @@ a {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 10px;
+}
+
+.mobile-gallery-grid {
+  grid-template-columns: 1fr;
+  gap: 8px;
 }
 
 .photo-card {
@@ -1248,6 +1281,20 @@ a {
     border-radius: 8px;
   }
 
+  .mobile-gallery-header {
+    padding: 8px;
+    border-radius: 8px;
+  }
+
+  .mobile-gallery-copy .eyebrow {
+    margin-bottom: 4px;
+    font-size: 0.46rem;
+  }
+
+  .mobile-gallery-copy h1 {
+    font-size: 0.82rem;
+  }
+
   .gallery-topbar-copy .eyebrow {
     margin-bottom: 4px;
     font-size: 0.46rem;
@@ -1266,6 +1313,10 @@ a {
     justify-content: flex-start;
     flex-wrap: wrap;
     gap: 6px;
+  }
+
+  .mobile-gallery-actions {
+    justify-content: flex-start;
   }
 
   .topbar-action-button {
