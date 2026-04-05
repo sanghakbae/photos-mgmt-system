@@ -195,6 +195,16 @@ export function deleteAdminPhoto(photoId) {
   });
 }
 
+export function bulkDeleteAdminPhotos(photoIds) {
+  return request('/api/admin/photos/bulk-delete', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${getAdminToken()}`,
+    },
+    body: JSON.stringify({ photoIds }),
+  });
+}
+
 export function getPhotoDownloadUrl(photo) {
   if (!photo?.id) {
     return '';

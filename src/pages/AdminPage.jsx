@@ -11,6 +11,7 @@ import {
   saveAdminSession,
 } from '../lib/googleAuth';
 import {
+  bulkDeleteAdminPhotos,
   deleteAdminPhoto,
   getAdminPhotos,
   getAdminStorageSummary,
@@ -924,9 +925,7 @@ export default function AdminPage() {
     setError(`선택한 파일 ${selectedSimilarIds.length}개를 삭제하는 중입니다...`);
 
     try {
-      for (const photoId of selectedSimilarIds) {
-        await deleteAdminPhoto(photoId);
-      }
+      await bulkDeleteAdminPhotos(selectedSimilarIds);
 
       setPhotos((current) => current.filter((photo) => !selectedSimilarIds.includes(photo.id)));
       setSimilarGroups((current) => current
@@ -1409,6 +1408,23 @@ export default function AdminPage() {
                   <div className="admin-photo-meta">
                     <span>{photo.fileName}</span>
                     <span>{photo.capturedAt ? formatDate(photo.capturedAt) : '촬영일 정보 없음'}</span>
+                  </div>
+
+                  <div className="admin-card-actions">
+                    <div className="admin-save-hint">
+                      <ShieldCheck size={16} />
+                      {photo.isPublic !== false ? '공개 중' : '비공개'}
+                    </div>
+                    <div className="admin-photo-buttons">
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => handleFieldSave(photo.id, 'isPublic', photo.isPublic === false)}
+                      >
+                        <ShieldCheck size={16} />
+                        {photo.isPublic !== false ? '비공개로 전환' : '공개로 전환'}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="admin-card-actions">

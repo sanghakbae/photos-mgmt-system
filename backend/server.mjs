@@ -707,6 +707,7 @@ function normalizePhotoMetadata(photo, requestOrigin = '') {
 
   return {
     ...photo,
+    isPublic: photo.isPublic !== false,
     imageUrl,
     thumbUrl,
   };
@@ -854,6 +855,7 @@ async function handleUploadPhoto(request, response) {
     updatedAt: now,
     createdBy: admin.email,
     sha256,
+    isPublic: true,
   };
 
   photos.unshift(record);
@@ -882,6 +884,7 @@ async function handleUpdatePhoto(request, response, photoId) {
     capturedAt: body.capturedAt ?? photos[index].capturedAt,
     coordinatesText: body.coordinatesText ?? photos[index].coordinatesText,
     mapsUrl: body.mapsUrl ?? photos[index].mapsUrl,
+    isPublic: typeof body.isPublic === 'boolean' ? body.isPublic : photos[index].isPublic !== false,
     updatedAt: new Date().toISOString(),
   };
 
@@ -903,6 +906,40 @@ async function handleDeletePhoto(request, response, photoId) {
   await deleteThumbnailBuffer(photoId);
   await writePhotos(photos.filter((photo) => photo.id !== photoId));
   sendJson(response, 200, { ok: true });
+}
+
+async function handleBulkDeletePhotos(request, response) {
+  await verifyAdmin(request);
+  const body = await readJsonBody(request);
+  const targetIds = Array.isArray(body?.photoIds)
+    ? body.photoIds.map((value) => String(value).trim()).filter(Boolean)
+    : [];
+
+  if (targetIds.length === 0) {
+    sendJson(response, 400, { error: 'Missing photo ids.' });
+    return;
+  }
+
+  const targetIdSet = new Set(targetIds);
+  const photos = await readPhotos();
+  const targets = photos.filter((photo) => targetIdSet.has(photo.id));
+
+  if (targets.length === 0) {
+    sendJson(response, 200, { ok: true, deletedCount: 0 });
+    return;
+  }
+
+  await Promise.all(
+    targets.map(async (photo) => {
+      await Promise.allSettled([
+        deleteUploadBuffer(path.basename(photo.imageUrl)),
+        deleteThumbnailBuffer(photo.id),
+      ]);
+    }),
+  );
+
+  await writePhotos(photos.filter((photo) => !targetIdSet.has(photo.id)));
+  sendJson(response, 200, { ok: true, deletedCount: targets.length });
 }
 
 async function handleDownloadPhoto(response, photoId) {
@@ -945,6 +982,19 @@ async function handleDownloadPhoto(response, photoId) {
 }
 
 async function handlePublicPhotos(request, response) {
+  const requestOrigin = getRequestOrigin(request);
+  const photos = (await readPhotos())
+    .filter((photo) => photo?.isPublic !== false)
+    .map((photo) => normalizePhotoMetadata(photo, requestOrigin));
+  const sorted = [...photos].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const settings = await readSettings();
+  sendJson(response, 200, {
+    siteTitle: settings.siteTitle || defaultSiteTitle,
+    photos: sorted,
+  });
+}
+
+async function handleAdminPhotos(request, response) {
   const requestOrigin = getRequestOrigin(request);
   const photos = (await readPhotos()).map((photo) => normalizePhotoMetadata(photo, requestOrigin));
   const sorted = [...photos].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
@@ -1021,6 +1071,7 @@ async function handleMigrationPhoto(request, response) {
     updatedAt: meta.updatedAt || meta.createdAt || now,
     createdBy: meta.createdBy || 'migration',
     sha256: meta.sha256 || createHash('sha256').update(fileBuffer).digest('hex'),
+    isPublic: meta.isPublic !== false,
   };
 
   const existingIndex = photos.findIndex((photo) => photo.id === photoId);
@@ -1207,7 +1258,7 @@ const server = createServer(async (request, response) => {
 
     if (request.method === 'GET' && pathname === '/api/admin/photos') {
       await verifyAdmin(request);
-      await handlePublicPhotos(request, response);
+      await handleAdminPhotos(request, response);
       return;
     }
 
@@ -1255,6 +1306,11 @@ const server = createServer(async (request, response) => {
     if (request.method === 'DELETE' && pathname.startsWith('/api/admin/photos/')) {
       const photoId = pathname.split('/').pop();
       await handleDeletePhoto(request, response, photoId);
+      return;
+    }
+
+    if (request.method === 'POST' && pathname === '/api/admin/photos/bulk-delete') {
+      await handleBulkDeletePhotos(request, response);
       return;
     }
 
