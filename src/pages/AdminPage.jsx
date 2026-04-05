@@ -216,6 +216,14 @@ function mergeUniquePhotos(photos) {
   return unique;
 }
 
+function revokePreviewUrls(items) {
+  for (const item of items ?? []) {
+    if (item?.previewUrl) {
+      URL.revokeObjectURL(item.previewUrl);
+    }
+  }
+}
+
 function formatStorageSize(totalBytes) {
   const value = Number(totalBytes || 0);
   if (value < 1024) {
@@ -477,7 +485,12 @@ export default function AdminPage() {
   }
 
   function clearPendingUploadBatch() {
-    setPendingUploadBatch(null);
+    setPendingUploadBatch((current) => {
+      if (current) {
+        revokePreviewUrls(current.items);
+      }
+      return null;
+    });
   }
 
   async function startUpload(preparedFiles) {
@@ -699,6 +712,7 @@ export default function AdminPage() {
           return {
             id: `${file.name}-${sha256.slice(0, 8)}`,
             file,
+            previewUrl: URL.createObjectURL(file),
             sha256,
             visualHash,
             include: !existingHashes.has(sha256),
@@ -749,11 +763,17 @@ export default function AdminPage() {
 
       const exactDuplicateCount = reviewedFiles.filter((item) => item.isDuplicate).length;
       const similarCandidateCount = reviewedFiles.filter((item) => item.similarToId).length;
-      setPendingUploadBatch({
-        items: reviewedFiles,
-        total: reviewedFiles.length,
-        exactDuplicateCount,
-        similarCandidateCount,
+      setPendingUploadBatch((current) => {
+        if (current) {
+          revokePreviewUrls(current.items);
+        }
+
+        return {
+          items: reviewedFiles,
+          total: reviewedFiles.length,
+          exactDuplicateCount,
+          similarCandidateCount,
+        };
       });
       setError(
         `완전 중복 ${exactDuplicateCount}개는 자동으로 건너뜁니다.${similarCandidateCount > 0 ? ` 유사 사진 후보 ${similarCandidateCount}개는 업로드 전에 선택해서 제외할 수 있습니다.` : ''}`,
@@ -820,9 +840,14 @@ export default function AdminPage() {
       return;
     }
 
+    revokePreviewUrls(pendingUploadBatch.items);
     clearPendingUploadBatch();
     await startUpload(selectedItems);
   }
+
+  useEffect(() => () => {
+    revokePreviewUrls(pendingUploadBatch?.items ?? []);
+  }, [pendingUploadBatch]);
 
   async function handleFieldSave(photoId, field, value) {
     try {
@@ -1158,7 +1183,7 @@ export default function AdminPage() {
                   <article className="admin-photo-card" key={item.id}>
                     <div className="admin-photo-preview">
                       <img
-                        src={URL.createObjectURL(item.file)}
+                        src={item.previewUrl}
                         alt={item.meta.title || item.file.name}
                       />
                     </div>

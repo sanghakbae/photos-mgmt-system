@@ -3,7 +3,7 @@ services:
     name: photos-mgmt-system-api
     runtime: node
     plan: free
-    buildCommand: npm ci
+    buildCommand: npm ci && npm run build
     startCommand: npm run dev:server
     healthCheckPath: /api/health
     disk:
