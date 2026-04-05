@@ -146,6 +146,10 @@ a {
   border-radius: 0;
 }
 
+.mobile-public-shell.is-landscape .mobile-public-slideshow-overlay {
+  display: none;
+}
+
 .mobile-public-slideshow-stage {
   position: relative;
   min-height: 100dvh;
@@ -216,12 +220,17 @@ a {
 
 .mobile-public-shell.is-landscape .mobile-public-slideshow-controls {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 50%;
   bottom: 0;
   z-index: 3;
+  transform: translateX(-50%);
+  justify-content: center;
   padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
   background: linear-gradient(180deg, transparent, rgba(9, 10, 14, 0.82));
+}
+
+.mobile-public-shell.is-landscape .slideshow-position {
+  display: none;
 }
 
 .mobile-public-card {
