@@ -12,8 +12,15 @@ import {
   Search,
   X,
 } from 'lucide-react';
+import ResilientImage from '../components/ResilientImage';
 import { getPhotoDownloadUrl, getPublicPhotos, getPublicSystemStatus } from '../lib/galleryApi';
 import { formatDate, getDisplayPhotoTitle } from '../lib/photoUtils';
+import {
+  buildSystemStatusFromError,
+  buildSystemStatusFromResponse,
+  createInitialSystemStatus,
+  getSystemStatusPresentation,
+} from '../lib/systemStatus';
 
 const PUBLIC_GALLERY_REFRESH_MS = 10000;
 const STATUS_REFRESH_MS = 15000;
@@ -97,13 +104,7 @@ export default function GalleryPage() {
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [slideshowVisible, setSlideshowVisible] = useState(false);
   const [isMobileExperience, setIsMobileExperience] = useState(() => detectMobileExperience());
-  const [systemStatus, setSystemStatus] = useState({
-    loading: true,
-    renderOk: false,
-    storageOk: false,
-    storageBackend: '',
-    message: '상태 확인 중',
-  });
+  const [systemStatus, setSystemStatus] = useState(() => createInitialSystemStatus());
   const imagePreloadCacheRef = useRef(new Set());
   const slideshowTouchStartRef = useRef(null);
 
@@ -144,22 +145,10 @@ export default function GalleryPage() {
   async function loadSystemStatus() {
     try {
       const status = await getPublicSystemStatus();
-      setSystemStatus({
-        loading: false,
-        renderOk: Boolean(status?.render?.ok),
-        storageOk: Boolean(status?.storage?.ok),
-        storageBackend: status?.storage?.backend || '',
-        message: status?.storage?.message || status?.render?.message || '상태 확인 완료',
-      });
+      setSystemStatus((previousStatus) => buildSystemStatusFromResponse(previousStatus, status));
     } catch (statusError) {
       console.error(statusError);
-      setSystemStatus({
-        loading: false,
-        renderOk: false,
-        storageOk: false,
-        storageBackend: '',
-        message: statusError instanceof Error ? statusError.message : '상태를 불러오지 못했습니다.',
-      });
+      setSystemStatus((previousStatus) => buildSystemStatusFromError(previousStatus, statusError));
     }
   }
 
@@ -262,11 +251,8 @@ export default function GalleryPage() {
 
   const hasMultipleDisplayPhotos = displayPhotos.length > 1;
   const hasMultipleSlides = slideshowPhotos.length > 1;
-  const systemStatusClassName = systemStatus.loading
-    ? 'status-pill status-pill-pending topbar-action-button topbar-status-pill'
-    : systemStatus.renderOk && systemStatus.storageOk
-      ? 'status-pill status-pill-connected topbar-action-button topbar-status-pill'
-      : 'status-pill status-pill-disconnected topbar-action-button topbar-status-pill';
+  const statusPresentation = getSystemStatusPresentation(systemStatus);
+  const systemStatusClassName = `${statusPresentation.className} topbar-action-button topbar-status-pill`;
 
   function openPhoto(photo, event) {
     event?.preventDefault?.();
@@ -521,11 +507,7 @@ export default function GalleryPage() {
               <div className="mobile-gallery-actions">
                 <div className={systemStatusClassName} title={systemStatus.message}>
                   {systemStatus.loading ? <LoaderCircle size={16} className="spin" /> : <Images size={16} />}
-                  {systemStatus.loading
-                    ? '신호 확인 중'
-                    : systemStatus.renderOk && systemStatus.storageOk
-                      ? `정상 연결 · ${systemStatus.storageBackend === 'r2' ? 'Cloudflare' : 'Local'}`
-                      : '연결 이상'}
+                  {statusPresentation.label}
                 </div>
                 <button
                   type="button"
@@ -551,11 +533,7 @@ export default function GalleryPage() {
               <div className="gallery-topbar-actions">
                 <div className={systemStatusClassName} title={systemStatus.message}>
                   {systemStatus.loading ? <LoaderCircle size={16} className="spin" /> : <Images size={16} />}
-                  {systemStatus.loading
-                    ? '신호 확인 중'
-                    : systemStatus.renderOk && systemStatus.storageOk
-                      ? `정상 연결 · ${systemStatus.storageBackend === 'r2' ? 'Cloudflare' : 'Local'}`
-                      : '연결 이상'}
+                  {statusPresentation.label}
                 </div>
                 <button
                   type="button"
@@ -596,19 +574,12 @@ export default function GalleryPage() {
               }}
               aria-label={`${getDisplayPhotoTitle(activeSlide)} 슬라이드 사진 크게 보기`}
               >
-                <img
-                  src={activeSlide.imageUrl}
-                alt={getDisplayPhotoTitle(activeSlide)}
-                className="slideshow-image"
-                decoding="async"
-              />
-              <div className="slideshow-overlay">
-                <div className="slideshow-copy">
-                  <p className="eyebrow">Slideshow</p>
-                  <h2>{getDisplayPhotoTitle(activeSlide)}</h2>
-                  <p>{activeSlide.locationText || '위치 정보 없음'}</p>
-                </div>
-              </div>
+                <ResilientImage
+                  sources={[activeSlide.imageUrl, activeSlide.thumbUrl]}
+                  alt={getDisplayPhotoTitle(activeSlide)}
+                  className="slideshow-image"
+                  decoding="async"
+                />
             </button>
             <button
               type="button"
@@ -719,9 +690,10 @@ export default function GalleryPage() {
               aria-label={`${getDisplayPhotoTitle(photo)} 크게 보기`}
             >
               <div className="photo-frame">
-                <img
-                  src={photo.thumbUrl || photo.imageUrl}
+                <ResilientImage
+                  sources={[photo.thumbUrl, photo.imageUrl]}
                   alt={photo.title}
+                  className="photo-card-image"
                   loading="lazy"
                   decoding="async"
                 />
@@ -799,9 +771,10 @@ export default function GalleryPage() {
                       <ChevronLeft size={20} />
                     </button>
                   ) : null}
-                  <img
-                    src={modalImageSrc || selectedPhoto.imageUrl}
+                  <ResilientImage
+                    sources={[modalImageSrc, selectedPhoto.imageUrl, selectedPhoto.thumbUrl]}
                     alt={getDisplayPhotoTitle(selectedPhoto)}
+                    className="photo-modal-image"
                     decoding="async"
                   />
                   {modalImageLoading ? (

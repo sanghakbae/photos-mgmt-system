@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Download, Images, LoaderCircle, MapPin, MessageSquareText, Search, X } from 'lucide-react';
+import ResilientImage from '../components/ResilientImage';
 import { getPhotoDownloadUrl, getPublicPhotos, getPublicSystemStatus } from '../lib/galleryApi';
 import { formatDate, getDisplayPhotoTitle } from '../lib/photoUtils';
+import {
+  buildSystemStatusFromError,
+  buildSystemStatusFromResponse,
+  createInitialSystemStatus,
+  getSystemStatusPresentation,
+} from '../lib/systemStatus';
 
 const PUBLIC_GALLERY_REFRESH_MS = 10000;
 const STATUS_REFRESH_MS = 15000;
@@ -30,13 +37,7 @@ export default function MobileGalleryPage() {
   const [slideshowVisible, setSlideshowVisible] = useState(false);
   const [slideshowSpeed, setSlideshowSpeed] = useState(5000);
   const [isLandscapeViewport, setIsLandscapeViewport] = useState(() => isMobileLandscapeViewport());
-  const [systemStatus, setSystemStatus] = useState({
-    loading: true,
-    renderOk: false,
-    storageOk: false,
-    storageBackend: '',
-    message: '상태 확인 중',
-  });
+  const [systemStatus, setSystemStatus] = useState(() => createInitialSystemStatus());
   const slideshowTouchStartRef = useRef(null);
 
   async function loadPublicGallery({ silent = false } = {}) {
@@ -65,22 +66,10 @@ export default function MobileGalleryPage() {
   async function loadSystemStatus() {
     try {
       const status = await getPublicSystemStatus();
-      setSystemStatus({
-        loading: false,
-        renderOk: Boolean(status?.render?.ok),
-        storageOk: Boolean(status?.storage?.ok),
-        storageBackend: status?.storage?.backend || '',
-        message: status?.storage?.message || status?.render?.message || '상태 확인 완료',
-      });
+      setSystemStatus((previousStatus) => buildSystemStatusFromResponse(previousStatus, status));
     } catch (statusError) {
       console.error(statusError);
-      setSystemStatus({
-        loading: false,
-        renderOk: false,
-        storageOk: false,
-        storageBackend: '',
-        message: statusError instanceof Error ? statusError.message : '상태를 불러오지 못했습니다.',
-      });
+      setSystemStatus((previousStatus) => buildSystemStatusFromError(previousStatus, statusError));
     }
   }
 
@@ -219,11 +208,8 @@ export default function MobileGalleryPage() {
     return () => window.clearInterval(intervalId);
   }, [displayPhotos.length, slideshowSpeed, slideshowVisible]);
 
-  const statusClassName = systemStatus.loading
-    ? 'status-pill status-pill-pending mobile-public-status'
-    : systemStatus.renderOk && systemStatus.storageOk
-      ? 'status-pill status-pill-connected mobile-public-status'
-      : 'status-pill status-pill-disconnected mobile-public-status';
+  const statusPresentation = getSystemStatusPresentation(systemStatus);
+  const statusClassName = `${statusPresentation.className} mobile-public-status`;
 
   function handleSlideshowTouchStart(event) {
     slideshowTouchStartRef.current = event.changedTouches?.[0]?.clientX ?? null;
@@ -269,11 +255,7 @@ export default function MobileGalleryPage() {
             </div>
             <div className={statusClassName} title={systemStatus.message}>
               {systemStatus.loading ? <LoaderCircle size={16} className="spin" /> : <Images size={16} />}
-              {systemStatus.loading
-                ? '신호 확인 중'
-                : systemStatus.renderOk && systemStatus.storageOk
-                  ? `정상 연결 · ${systemStatus.storageBackend === 'r2' ? 'Cloudflare' : 'Local'}`
-                  : '연결 이상'}
+              {statusPresentation.label}
             </div>
           </header>
 
@@ -326,16 +308,11 @@ export default function MobileGalleryPage() {
                 }
               }}
             >
-              <img
-                src={activeSlide.imageUrl || activeSlide.thumbUrl}
+              <ResilientImage
+                sources={[activeSlide.imageUrl, activeSlide.thumbUrl]}
                 alt={getDisplayPhotoTitle(activeSlide)}
                 className="mobile-public-slideshow-image"
               />
-              <div className="mobile-public-slideshow-overlay">
-                <p className="eyebrow">Slideshow</p>
-                <h2>{getDisplayPhotoTitle(activeSlide)}</h2>
-                <p>{activeSlide.locationText || '위치 정보 없음'}</p>
-              </div>
             </button>
             <button
               type="button"
@@ -412,9 +389,10 @@ export default function MobileGalleryPage() {
             }}
           >
             <div className="mobile-public-photo-frame">
-              <img
-                src={photo.thumbUrl || photo.imageUrl}
+              <ResilientImage
+                sources={[photo.thumbUrl, photo.imageUrl]}
                 alt={getDisplayPhotoTitle(photo)}
+                className="mobile-public-card-image"
                 loading="lazy"
                 decoding="async"
               />
@@ -486,9 +464,9 @@ export default function MobileGalleryPage() {
                   <ChevronLeft size={18} />
                 </button>
               ) : null}
-              <img
+              <ResilientImage
+                sources={[selectedPhoto.imageUrl, selectedPhoto.thumbUrl]}
                 className="mobile-public-modal-image"
-                src={selectedPhoto.imageUrl || selectedPhoto.thumbUrl}
                 alt={getDisplayPhotoTitle(selectedPhoto)}
                 decoding="async"
               />

@@ -1,7 +1,6 @@
 import { loadAdminSession } from './googleAuth';
 
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
-const publicPhotoOrderSeed = Math.random().toString(36).slice(2);
 
 function createDetailedError(summary, details) {
   const message = [
@@ -55,25 +54,6 @@ function withAssetUrl(photo) {
     imageUrl: toAbsoluteAssetUrl(photo.imageUrl),
     thumbUrl: toAbsoluteAssetUrl(photo.thumbUrl),
   };
-}
-
-function hashString(value) {
-  let hash = 2166136261;
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-
-  return hash >>> 0;
-}
-
-function sortPublicPhotosInSessionRandomOrder(photos) {
-  return [...photos].sort((left, right) => {
-    const leftRank = hashString(`${publicPhotoOrderSeed}:${left?.id || left?.fileName || ''}`);
-    const rightRank = hashString(`${publicPhotoOrderSeed}:${right?.id || right?.fileName || ''}`);
-    return leftRank - rightRank;
-  });
 }
 
 async function request(path, options = {}) {
@@ -159,9 +139,7 @@ function getAdminToken() {
 }
 
 export function getPublicPhotos() {
-  return request('/api/public/photos').then((data) =>
-    sortPublicPhotosInSessionRandomOrder((data?.photos ?? []).map(withAssetUrl)),
-  );
+  return request('/api/public/photos').then((data) => (data?.photos ?? []).map(withAssetUrl));
 }
 
 export function getPublicSystemStatus() {
