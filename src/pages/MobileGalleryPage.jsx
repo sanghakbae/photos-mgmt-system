@@ -117,6 +117,31 @@ export default function MobileGalleryPage() {
     };
   }, [selectedPhoto]);
 
+  const displayPhotos = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) {
+      return photos;
+    }
+
+    return photos.filter((photo) => {
+      const values = [photo.title, photo.locationText, photo.note, photo.fileName]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return values.includes(keyword);
+    });
+  }, [photos, search]);
+
+  const selectedPhotoIndex = useMemo(() => {
+    if (!selectedPhoto) {
+      return -1;
+    }
+    return displayPhotos.findIndex((photo) => photo.id === selectedPhoto.id);
+  }, [displayPhotos, selectedPhoto]);
+
+  const hasMultiplePhotos = displayPhotos.length > 1;
+  const activeSlide = displayPhotos[activeSlideIndex] ?? displayPhotos[0] ?? null;
+
   useEffect(() => {
     function handleKeydown(event) {
       if (event.key === 'Escape') {
@@ -172,31 +197,6 @@ export default function MobileGalleryPage() {
       window.removeEventListener('orientationchange', syncLandscapeSlideshow);
     };
   }, []);
-
-  const displayPhotos = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) {
-      return photos;
-    }
-
-    return photos.filter((photo) => {
-      const values = [photo.title, photo.locationText, photo.note, photo.fileName]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return values.includes(keyword);
-    });
-  }, [photos, search]);
-
-  const selectedPhotoIndex = useMemo(() => {
-    if (!selectedPhoto) {
-      return -1;
-    }
-    return displayPhotos.findIndex((photo) => photo.id === selectedPhoto.id);
-  }, [displayPhotos, selectedPhoto]);
-
-  const hasMultiplePhotos = displayPhotos.length > 1;
-  const activeSlide = displayPhotos[activeSlideIndex] ?? displayPhotos[0] ?? null;
 
   useEffect(() => {
     if (!displayPhotos.length) {
