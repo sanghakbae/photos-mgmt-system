@@ -5,6 +5,7 @@ import { CheckSquare, LoaderCircle, LogOut, PencilLine, ShieldCheck, Square, Tra
 import {
   clearAdminSession,
   decodeJwt,
+  getConfiguredAdminEmails,
   isAllowedAdminEmail,
   loadAdminSession,
   loadGoogleIdentityScript,
@@ -271,7 +272,7 @@ function AdminLogin({ error, loading, onLogin, buttonContainerRef }) {
       </div>
       {error ? <p className="error-banner admin-error">{error}</p> : null}
       <p className="admin-hint">
-        허용 이메일 제한은 `VITE_ADMIN_EMAILS`와 서버 `ADMIN_EMAILS`에서 함께 관리합니다.
+        허용된 관리자 계정으로만 로그인할 수 있습니다.
       </p>
       <Link className="admin-back-link" to="/">
         공개 갤러리로 돌아가기
@@ -440,7 +441,15 @@ export default function AdminPage() {
           }
 
           if (!isAllowedAdminEmail(profile.email)) {
-            setError('허용되지 않은 관리자 계정입니다.');
+            const configuredAdminEmails = getConfiguredAdminEmails();
+            setError(
+              configuredAdminEmails.length > 0
+                ? [
+                    `허용되지 않은 관리자 계정입니다: ${profile.email}`,
+                    '배포 프론트의 `VITE_ADMIN_EMAILS`와 서버의 `ADMIN_EMAILS`에 이 이메일이 포함되어 있는지 확인해 주세요.',
+                  ].join('\n')
+                : `허용되지 않은 관리자 계정입니다: ${profile.email}`,
+            );
             return;
           }
 

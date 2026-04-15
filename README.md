@@ -12,12 +12,14 @@
 1. `.env.local`에 값 설정
 2. 백엔드 실행: `npm run dev:server`
 3. 프론트 실행: `npm run dev -- --host 127.0.0.1`
+4. 로컬 접속 주소: `http://127.0.0.1:4173/` 또는 Vite가 출력한 루트 주소
 
 ## 환경변수
 
 - `VITE_GOOGLE_CLIENT_ID`
 - `VITE_ADMIN_EMAILS`
 - `VITE_API_BASE_URL`
+- `VITE_APP_BASE_PATH`
 - `ADMIN_EMAILS`
 - `ALLOWED_ORIGINS`
 - `DATA_DIR`
@@ -51,7 +53,9 @@
 
 - `main` 브랜치 푸시 시 GitHub Actions로 배포
 - 저장소 Settings > Pages 에서 source를 `GitHub Actions`로 설정
+- 커스텀 도메인 사용 시 프론트 base path는 `/`를 사용하고, 기본 운영 도메인은 `https://gallery.sanghak.kr/`
 - 프론트 빌드 시 `VITE_API_BASE_URL`을 Render 백엔드 URL로 지정
+- 저장소 하위 경로에 다시 배포해야 하면 `VITE_APP_BASE_PATH=/photos-mgmt-system/` 처럼 오버라이드 가능
 
 ## GitHub Actions
 

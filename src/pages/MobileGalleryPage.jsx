@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarDays, ChevronLeft, ChevronRight, Download, Images, LoaderCircle, MapPin, MessageSquareText, Search, X } from 'lucide-react';
 import { getPhotoDownloadUrl, getPublicPhotos, getPublicSystemStatus } from '../lib/galleryApi';
 import { formatDate, getDisplayPhotoTitle } from '../lib/photoUtils';
@@ -27,7 +27,7 @@ export default function MobileGalleryPage() {
   const [error, setError] = useState('');
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
-  const [slideshowVisible, setSlideshowVisible] = useState(true);
+  const [slideshowVisible, setSlideshowVisible] = useState(false);
   const [slideshowSpeed, setSlideshowSpeed] = useState(5000);
   const [isLandscapeViewport, setIsLandscapeViewport] = useState(() => isMobileLandscapeViewport());
   const [systemStatus, setSystemStatus] = useState({
@@ -37,6 +37,7 @@ export default function MobileGalleryPage() {
     storageBackend: '',
     message: '상태 확인 중',
   });
+  const slideshowTouchStartRef = useRef(null);
 
   async function loadPublicGallery({ silent = false } = {}) {
     if (!silent) {
@@ -119,13 +120,42 @@ export default function MobileGalleryPage() {
   useEffect(() => {
     function handleKeydown(event) {
       if (event.key === 'Escape') {
-        setSelectedPhoto(null);
+        if (selectedPhoto) {
+          setSelectedPhoto(null);
+          return;
+        }
+
+        if (slideshowVisible) {
+          setSlideshowVisible(false);
+          return;
+        }
+      }
+
+      if (selectedPhoto) {
+        if (event.key === 'ArrowLeft' && hasMultiplePhotos) {
+          const nextIndex = (selectedPhotoIndex - 1 + displayPhotos.length) % displayPhotos.length;
+          setSelectedPhoto(displayPhotos[nextIndex] ?? null);
+        } else if (event.key === 'ArrowRight' && hasMultiplePhotos) {
+          const nextIndex = (selectedPhotoIndex + 1) % displayPhotos.length;
+          setSelectedPhoto(displayPhotos[nextIndex] ?? null);
+        }
+        return;
+      }
+
+      if (!slideshowVisible) {
+        return;
+      }
+
+      if (event.key === 'ArrowLeft' && hasMultiplePhotos) {
+        setActiveSlideIndex((current) => (current - 1 + displayPhotos.length) % displayPhotos.length);
+      } else if (event.key === 'ArrowRight' && hasMultiplePhotos) {
+        setActiveSlideIndex((current) => (current + 1) % displayPhotos.length);
       }
     }
 
     window.addEventListener('keydown', handleKeydown);
     return () => window.removeEventListener('keydown', handleKeydown);
-  }, []);
+  }, [selectedPhoto, slideshowVisible, hasMultiplePhotos, selectedPhotoIndex, displayPhotos]);
 
   useEffect(() => {
     function syncLandscapeSlideshow() {
@@ -199,55 +229,97 @@ export default function MobileGalleryPage() {
       ? 'status-pill status-pill-connected mobile-public-status'
       : 'status-pill status-pill-disconnected mobile-public-status';
 
+  function handleSlideshowTouchStart(event) {
+    slideshowTouchStartRef.current = event.changedTouches?.[0]?.clientX ?? null;
+  }
+
+  function handleSlideshowTouchEnd(event) {
+    const startX = slideshowTouchStartRef.current;
+    const endX = event.changedTouches?.[0]?.clientX ?? null;
+    slideshowTouchStartRef.current = null;
+
+    if (startX === null || endX === null) {
+      return;
+    }
+
+    const deltaX = endX - startX;
+    if (Math.abs(deltaX) < 48 || !hasMultiplePhotos) {
+      return;
+    }
+
+    setActiveSlideIndex((current) =>
+      deltaX < 0
+        ? (current + 1) % displayPhotos.length
+        : (current - 1 + displayPhotos.length) % displayPhotos.length,
+    );
+  }
+
   return (
-    <div className={`mobile-public-shell ${isLandscapeViewport ? 'is-landscape' : ''}`}>
-      <header className="mobile-public-header">
-        <div>
-          <p className="eyebrow">Mobile Public Gallery</p>
-          <h1>그날의 기록</h1>
-          <p className="mobile-public-subtitle">
-            공개 사진 {photos.length}장
-            {refreshing ? ' · 새로고침 중' : ''}
-          </p>
-        </div>
-        <div className={statusClassName} title={systemStatus.message}>
-          {systemStatus.loading ? <LoaderCircle size={16} className="spin" /> : <Images size={16} />}
-          {systemStatus.loading
-            ? '신호 확인 중'
-            : systemStatus.renderOk && systemStatus.storageOk
-              ? `정상 연결 · ${systemStatus.storageBackend === 'r2' ? 'Cloudflare' : 'Local'}`
-              : '연결 이상'}
-        </div>
-      </header>
+    <div
+      className={`mobile-public-shell ${isLandscapeViewport ? 'is-landscape' : ''} ${
+        slideshowVisible ? 'is-slideshow-only' : ''
+      }`}
+    >
+      {!slideshowVisible ? (
+        <>
+          <header className="mobile-public-header">
+            <div>
+              <p className="eyebrow">Mobile Public Gallery</p>
+              <h1>그날의 기록</h1>
+              <p className="mobile-public-subtitle">
+                공개 사진 {photos.length}장
+                {refreshing ? ' · 새로고침 중' : ''}
+              </p>
+            </div>
+            <div className={statusClassName} title={systemStatus.message}>
+              {systemStatus.loading ? <LoaderCircle size={16} className="spin" /> : <Images size={16} />}
+              {systemStatus.loading
+                ? '신호 확인 중'
+                : systemStatus.renderOk && systemStatus.storageOk
+                  ? `정상 연결 · ${systemStatus.storageBackend === 'r2' ? 'Cloudflare' : 'Local'}`
+                  : '연결 이상'}
+            </div>
+          </header>
 
-      <section className="mobile-public-toolbar">
-        <label className="search-field" htmlFor="mobile-photo-search">
-          <Search size={18} />
-          <input
-            id="mobile-photo-search"
-            type="search"
-            placeholder="제목, 위치, 메모, 파일명 검색"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
-        <div className="mobile-public-toolbar-actions">
-          <button
-            type="button"
-            className="secondary-button topbar-action-button"
-            onClick={() => setSlideshowVisible((current) => !current)}
-          >
-            {slideshowVisible ? '슬라이드 숨기기' : '슬라이드 보기'}
-          </button>
-        </div>
-      </section>
+          <section className="mobile-public-toolbar">
+            <label className="search-field" htmlFor="mobile-photo-search">
+              <Search size={18} />
+              <input
+                id="mobile-photo-search"
+                type="search"
+                placeholder="제목, 위치, 메모, 파일명 검색"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </label>
+            <div className="mobile-public-toolbar-actions">
+              <button
+                type="button"
+                className="secondary-button topbar-action-button"
+                onClick={() => setSlideshowVisible(true)}
+              >
+                슬라이드 보기
+              </button>
+            </div>
+          </section>
 
-      {error ? <p className="error-banner">{error}</p> : null}
-      {loading ? <p className="admin-loading">사진 목록을 불러오는 중입니다.</p> : null}
+          {error ? <p className="error-banner">{error}</p> : null}
+          {loading ? <p className="admin-loading">사진 목록을 불러오는 중입니다.</p> : null}
+        </>
+      ) : null}
 
       {slideshowVisible && activeSlide ? (
         <section className="mobile-public-slideshow">
-          <div className="mobile-public-slideshow-stage">
+          <div
+            className="mobile-public-slideshow-stage"
+            onTouchStart={handleSlideshowTouchStart}
+            onTouchEnd={handleSlideshowTouchEnd}
+          >
+            <div
+              className="mobile-public-slideshow-backdrop"
+              style={{ backgroundImage: `url(${activeSlide.imageUrl || activeSlide.thumbUrl})` }}
+              aria-hidden="true"
+            />
             <button
               type="button"
               className="mobile-public-slideshow-photo"
@@ -268,6 +340,14 @@ export default function MobileGalleryPage() {
                 <h2>{getDisplayPhotoTitle(activeSlide)}</h2>
                 <p>{activeSlide.locationText || '위치 정보 없음'}</p>
               </div>
+            </button>
+            <button
+              type="button"
+              className="icon-button mobile-public-slideshow-close"
+              onClick={() => setSlideshowVisible(false)}
+              aria-label="슬라이드쇼 닫기"
+            >
+              <X size={18} />
             </button>
             {hasMultiplePhotos ? (
               <>
@@ -310,11 +390,19 @@ export default function MobileGalleryPage() {
             <div className="slideshow-position" aria-live="polite">
               {displayPhotos.length > 0 ? `${activeSlideIndex + 1} / ${displayPhotos.length}` : '0 / 0'}
             </div>
+            <button
+              type="button"
+              className="secondary-button topbar-action-button"
+              onClick={() => setSlideshowVisible(false)}
+            >
+              갤러리 보기
+            </button>
           </div>
         </section>
       ) : null}
 
-      <main className="mobile-public-feed">
+      {!slideshowVisible ? (
+        <main className="mobile-public-feed">
         {displayPhotos.map((photo) => (
           <button
             key={photo.id}
@@ -357,7 +445,8 @@ export default function MobileGalleryPage() {
             </div>
           </button>
         ))}
-      </main>
+        </main>
+      ) : null}
 
       {selectedPhoto ? (
         <div

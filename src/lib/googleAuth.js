@@ -93,11 +93,15 @@ export function clearAdminSession() {
   localStorage.removeItem(STORAGE_KEY);
 }
 
-export function isAllowedAdminEmail(email) {
-  const configured = (import.meta.env.VITE_ADMIN_EMAILS ?? '')
+export function getConfiguredAdminEmails() {
+  return (import.meta.env.VITE_ADMIN_EMAILS ?? '')
     .split(',')
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
+}
+
+export function isAllowedAdminEmail(email) {
+  const configured = getConfiguredAdminEmails();
 
   if (configured.length === 0) {
     return true;

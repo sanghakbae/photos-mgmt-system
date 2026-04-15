@@ -28,4 +28,4 @@ services:
       - key: ADMIN_EMAILS
         sync: false
       - key: ALLOWED_ORIGINS
-        value: https://sanghakbae.github.io
+        value: https://gallery.sanghak.kr,https://sanghakbae.github.io

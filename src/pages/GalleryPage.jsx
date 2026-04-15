@@ -10,6 +10,7 @@ import {
   MapPin,
   MessageSquareText,
   Search,
+  X,
 } from 'lucide-react';
 import { getPhotoDownloadUrl, getPublicPhotos, getPublicSystemStatus } from '../lib/galleryApi';
 import { formatDate, getDisplayPhotoTitle } from '../lib/photoUtils';
@@ -94,7 +95,7 @@ export default function GalleryPage() {
   const [modalImageLoading, setModalImageLoading] = useState(false);
   const [slideshowSpeed, setSlideshowSpeed] = useState(5000);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
-  const [slideshowVisible, setSlideshowVisible] = useState(true);
+  const [slideshowVisible, setSlideshowVisible] = useState(false);
   const [isMobileExperience, setIsMobileExperience] = useState(() => detectMobileExperience());
   const [systemStatus, setSystemStatus] = useState({
     loading: true,
@@ -104,6 +105,7 @@ export default function GalleryPage() {
     message: '상태 확인 중',
   });
   const imagePreloadCacheRef = useRef(new Set());
+  const slideshowTouchStartRef = useRef(null);
 
   function preloadImage(src) {
     if (!src || imagePreloadCacheRef.current.has(src)) {
@@ -383,6 +385,27 @@ export default function GalleryPage() {
     });
   }
 
+  function handleSlideshowTouchStart(event) {
+    slideshowTouchStartRef.current = event.changedTouches?.[0]?.clientX ?? null;
+  }
+
+  function handleSlideshowTouchEnd(event) {
+    const startX = slideshowTouchStartRef.current;
+    const endX = event.changedTouches?.[0]?.clientX ?? null;
+    slideshowTouchStartRef.current = null;
+
+    if (startX === null || endX === null) {
+      return;
+    }
+
+    const deltaX = endX - startX;
+    if (Math.abs(deltaX) < 48) {
+      return;
+    }
+
+    moveSlide(deltaX < 0 ? 1 : -1);
+  }
+
   function handleBackdropClick(event) {
     if (event.target !== event.currentTarget) {
       return;
@@ -394,24 +417,31 @@ export default function GalleryPage() {
   useEffect(() => {
     function handleKeydown(event) {
       if (event.key === 'Escape') {
-        setSelectedPhotoId(null);
+        if (selectedPhotoId) {
+          closePhoto();
+          return;
+        }
+
+        if (slideshowVisible) {
+          setSlideshowVisible(false);
+        }
         return;
       }
 
-      if (!selectedPhotoId) {
-        return;
-      }
-
-      if (event.key === 'ArrowLeft') {
+      if (selectedPhotoId && event.key === 'ArrowLeft') {
         moveSelectedPhoto(-1);
-      } else if (event.key === 'ArrowRight') {
+      } else if (selectedPhotoId && event.key === 'ArrowRight') {
         moveSelectedPhoto(1);
+      } else if (slideshowVisible && event.key === 'ArrowLeft') {
+        moveSlide(-1);
+      } else if (slideshowVisible && event.key === 'ArrowRight') {
+        moveSlide(1);
       }
     }
 
     window.addEventListener('keydown', handleKeydown);
     return () => window.removeEventListener('keydown', handleKeydown);
-  }, [displayPhotos, hasMultipleDisplayPhotos, selectedPhotoId, selectedPhotoIndex]);
+  }, [selectedPhotoId, slideshowVisible, selectedPhotoIndex, hasMultipleDisplayPhotos, hasMultipleSlides]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -471,79 +501,90 @@ export default function GalleryPage() {
   }, [hasMultipleSlides, slideshowPhotos.length, slideshowSpeed]);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${slideshowVisible ? 'is-slideshow-mode' : ''}`}>
       <div className="background-orb orb-left" />
       <div className="background-orb orb-right" />
 
-      <header className="hero">
-        {isMobileExperience ? (
-          <div className="mobile-gallery-header">
-            <div className="mobile-gallery-copy">
-              <p className="eyebrow">Mobile Public Gallery</p>
-              <h1>그날의 기록</h1>
-              <p className="gallery-topbar-meta">
-                공개 사진 {stats.total}장
-                <span className="gallery-topbar-divider">·</span>
-                최근 촬영 {stats.latest}
-              </p>
-            </div>
-            <div className="mobile-gallery-actions">
-              <div className={systemStatusClassName} title={systemStatus.message}>
-                {systemStatus.loading ? <LoaderCircle size={16} className="spin" /> : <Images size={16} />}
-                {systemStatus.loading
-                  ? '신호 확인 중'
-                  : systemStatus.renderOk && systemStatus.storageOk
-                    ? `정상 연결 · ${systemStatus.storageBackend === 'r2' ? 'Cloudflare' : 'Local'}`
-                    : '연결 이상'}
+      {!slideshowVisible ? (
+        <header className="hero">
+          {isMobileExperience ? (
+            <div className="mobile-gallery-header">
+              <div className="mobile-gallery-copy">
+                <p className="eyebrow">Mobile Public Gallery</p>
+                <h1>그날의 기록</h1>
+                <p className="gallery-topbar-meta">
+                  공개 사진 {stats.total}장
+                  <span className="gallery-topbar-divider">·</span>
+                  최근 촬영 {stats.latest}
+                </p>
               </div>
-              <button
-                type="button"
-                className="secondary-button topbar-action-button"
-                onClick={() => setSlideshowVisible((current) => !current)}
-              >
-                {slideshowVisible ? '슬라이드 숨기기' : '슬라이드 보기'}
-              </button>
+              <div className="mobile-gallery-actions">
+                <div className={systemStatusClassName} title={systemStatus.message}>
+                  {systemStatus.loading ? <LoaderCircle size={16} className="spin" /> : <Images size={16} />}
+                  {systemStatus.loading
+                    ? '신호 확인 중'
+                    : systemStatus.renderOk && systemStatus.storageOk
+                      ? `정상 연결 · ${systemStatus.storageBackend === 'r2' ? 'Cloudflare' : 'Local'}`
+                      : '연결 이상'}
+                </div>
+                <button
+                  type="button"
+                  className="secondary-button topbar-action-button"
+                  onClick={() => setSlideshowVisible(true)}
+                >
+                  슬라이드 보기
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="gallery-topbar">
-            <div className="gallery-topbar-copy">
-              <p className="eyebrow">Public Gallery</p>
-              <h1>그날의 기록 (Records of the Day)</h1>
-              <p className="gallery-topbar-meta">
-                공개 사진 {stats.total}장
-                <span className="gallery-topbar-divider">·</span>
-                최근 촬영 {stats.latest}
-              </p>
-            </div>
+          ) : (
+            <div className="gallery-topbar">
+              <div className="gallery-topbar-copy">
+                <p className="eyebrow">Public Gallery</p>
+                <h1>그날의 기록 (Records of the Day)</h1>
+                <p className="gallery-topbar-meta">
+                  공개 사진 {stats.total}장
+                  <span className="gallery-topbar-divider">·</span>
+                  최근 촬영 {stats.latest}
+                </p>
+              </div>
 
-            <div className="gallery-topbar-actions">
-              <div className={systemStatusClassName} title={systemStatus.message}>
-                {systemStatus.loading ? <LoaderCircle size={16} className="spin" /> : <Images size={16} />}
-                {systemStatus.loading
-                  ? '신호 확인 중'
-                  : systemStatus.renderOk && systemStatus.storageOk
-                    ? `정상 연결 · ${systemStatus.storageBackend === 'r2' ? 'Cloudflare' : 'Local'}`
-                    : '연결 이상'}
+              <div className="gallery-topbar-actions">
+                <div className={systemStatusClassName} title={systemStatus.message}>
+                  {systemStatus.loading ? <LoaderCircle size={16} className="spin" /> : <Images size={16} />}
+                  {systemStatus.loading
+                    ? '신호 확인 중'
+                    : systemStatus.renderOk && systemStatus.storageOk
+                      ? `정상 연결 · ${systemStatus.storageBackend === 'r2' ? 'Cloudflare' : 'Local'}`
+                      : '연결 이상'}
+                </div>
+                <button
+                  type="button"
+                  className="secondary-button topbar-action-button"
+                  onClick={() => setSlideshowVisible(true)}
+                >
+                  슬라이드쇼 보기
+                </button>
+                <Link className="secondary-button topbar-action-button" to="/admin">
+                  관리자
+                </Link>
               </div>
-              <button
-                type="button"
-                className="secondary-button topbar-action-button"
-                onClick={() => setSlideshowVisible((current) => !current)}
-              >
-                {slideshowVisible ? '슬라이드쇼 숨기기' : '슬라이드쇼 보기'}
-              </button>
-              <Link className="secondary-button topbar-action-button" to="/admin">
-                관리자
-              </Link>
             </div>
-          </div>
-        )}
-      </header>
+          )}
+        </header>
+      ) : null}
 
       {slideshowVisible && activeSlide ? (
         <section className="hero-panel slideshow-panel">
-          <div className="slideshow-stage">
+          <div
+            className="slideshow-stage"
+            onTouchStart={handleSlideshowTouchStart}
+            onTouchEnd={handleSlideshowTouchEnd}
+          >
+            <div
+              className="slideshow-backdrop-image"
+              style={{ backgroundImage: `url(${activeSlide.imageUrl})` }}
+              aria-hidden="true"
+            />
             <button
               type="button"
               className="slideshow-photo-button"
@@ -554,9 +595,9 @@ export default function GalleryPage() {
                 }
               }}
               aria-label={`${getDisplayPhotoTitle(activeSlide)} 슬라이드 사진 크게 보기`}
-            >
-              <img
-                src={activeSlide.imageUrl}
+              >
+                <img
+                  src={activeSlide.imageUrl}
                 alt={getDisplayPhotoTitle(activeSlide)}
                 className="slideshow-image"
                 decoding="async"
@@ -568,6 +609,14 @@ export default function GalleryPage() {
                   <p>{activeSlide.locationText || '위치 정보 없음'}</p>
                 </div>
               </div>
+            </button>
+            <button
+              type="button"
+              className="icon-button slideshow-close-button"
+              onClick={() => setSlideshowVisible(false)}
+              aria-label="슬라이드쇼 닫기"
+            >
+              <X size={20} />
             </button>
 
             {hasMultipleSlides ? (
@@ -612,11 +661,22 @@ export default function GalleryPage() {
             <div className="slideshow-position" aria-live="polite">
               {slideshowPhotos.length > 0 ? `${activeSlideIndex + 1} / ${slideshowPhotos.length}` : '0 / 0'}
             </div>
+
+            <div className="hero-actions-inline">
+              <button
+                type="button"
+                className="secondary-button topbar-action-button"
+                onClick={() => setSlideshowVisible(false)}
+              >
+                갤러리 보기
+              </button>
+            </div>
           </div>
         </section>
       ) : null}
 
-      <section className={isMobileExperience ? 'toolbar mobile-gallery-toolbar' : 'toolbar'}>
+      {!slideshowVisible ? (
+        <section className={isMobileExperience ? 'toolbar mobile-gallery-toolbar' : 'toolbar'}>
         <label className="search-field" htmlFor="photo-search">
           <Search size={18} />
           <input
@@ -634,11 +694,13 @@ export default function GalleryPage() {
             <span>공개 갤러리입니다. 관리자만 업로드와 편집이 가능합니다.</span>
           </div>
         ) : null}
-      </section>
+        </section>
+      ) : null}
 
-      {error ? <p className="error-banner">{error}</p> : null}
+      {!slideshowVisible && error ? <p className="error-banner">{error}</p> : null}
 
-      <main className={isMobileExperience ? 'gallery-grid mobile-gallery-grid' : 'gallery-grid'}>
+      {!slideshowVisible ? (
+        <main className={isMobileExperience ? 'gallery-grid mobile-gallery-grid' : 'gallery-grid'}>
         {displayPhotos.map((photo, index) => (
           <article
             className={`photo-card ${photo.isPlaceholder ? 'placeholder-card' : ''}`}
@@ -694,7 +756,8 @@ export default function GalleryPage() {
             </button>
           </article>
         ))}
-      </main>
+        </main>
+      ) : null}
 
       {selectedPhoto ? (
         <div
