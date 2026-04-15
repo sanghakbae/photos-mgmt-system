@@ -145,14 +145,15 @@ a {
   box-shadow: none;
 }
 
-.mobile-public-shell.is-landscape .mobile-public-header,
-.mobile-public-shell.is-landscape .mobile-public-toolbar,
-.mobile-public-shell.is-landscape .mobile-public-feed,
-.mobile-public-shell.is-landscape .error-banner,
-.mobile-public-shell.is-landscape .admin-loading {
+.mobile-public-shell.is-slideshow-only .mobile-public-header,
+.mobile-public-shell.is-slideshow-only .mobile-public-toolbar,
+.mobile-public-shell.is-slideshow-only .mobile-public-feed,
+.mobile-public-shell.is-slideshow-only .error-banner,
+.mobile-public-shell.is-slideshow-only .admin-loading {
   display: none;
 }
 
+.mobile-public-shell.is-slideshow-only .mobile-public-slideshow,
 .mobile-public-shell.is-landscape .mobile-public-slideshow {
   position: fixed;
   inset: 0;
@@ -162,6 +163,7 @@ a {
   border-radius: 0;
 }
 
+.mobile-public-shell.is-slideshow-only .mobile-public-slideshow-overlay,
 .mobile-public-shell.is-landscape .mobile-public-slideshow-overlay {
   display: none;
 }
