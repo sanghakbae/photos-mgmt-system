@@ -69,7 +69,6 @@ const mimeTypes = {
   '.heic': 'image/heic',
   '.heif': 'image/heif',
 };
-const downloadWatermark = 'totoriverce@naver.com';
 const thumbnailWidth = 640;
 const thumbnailHeight = 640;
 const photosObjectKey = 'metadata/photos.json';
@@ -433,68 +432,6 @@ function getDownloadFormat(mimeType, fileName) {
   };
 }
 
-function createWatermarkSvg(width, height) {
-  const margin = Math.max(18, Math.round(Math.min(width, height) * 0.028));
-  const fontSize = Math.max(14, Math.round(Math.min(width, height) * 0.016));
-  const x = width - margin;
-  const y = height - margin;
-
-  return Buffer.from(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
-      <defs>
-        <filter id="extrude" x="-30%" y="-30%" width="190%" height="190%">
-          <feOffset in="SourceAlpha" dx="0.8" dy="0.8" result="offset1"/>
-          <feOffset in="SourceAlpha" dx="1.6" dy="1.6" result="offset2"/>
-          <feOffset in="SourceAlpha" dx="2.4" dy="2.4" result="offset3"/>
-          <feOffset in="SourceAlpha" dx="3.2" dy="3.2" result="offset4"/>
-          <feFlood flood-color="#000000" flood-opacity="0.18" result="depthColor"/>
-          <feComposite in="depthColor" in2="offset1" operator="in" result="depth1"/>
-          <feComposite in="depthColor" in2="offset2" operator="in" result="depth2"/>
-          <feComposite in="depthColor" in2="offset3" operator="in" result="depth3"/>
-          <feComposite in="depthColor" in2="offset4" operator="in" result="depth4"/>
-          <feMerge result="depthStack">
-            <feMergeNode in="depth4"/>
-            <feMergeNode in="depth3"/>
-            <feMergeNode in="depth2"/>
-            <feMergeNode in="depth1"/>
-          </feMerge>
-          <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000000" flood-opacity="0.24"/>
-        </filter>
-        <filter id="shine" x="-20%" y="-20%" width="160%" height="160%">
-          <feDropShadow dx="-0.8" dy="-0.8" stdDeviation="1.3" flood-color="#ffffff" flood-opacity="0.36"/>
-        </filter>
-      </defs>
-      <text
-        x="${x}"
-        y="${y}"
-        text-anchor="end"
-        fill="rgba(0,0,0,0.01)"
-        font-size="${fontSize}"
-        font-family="'Didot','Bodoni 72','Cormorant Garamond','Times New Roman',serif"
-        font-weight="800"
-        font-style="italic"
-        letter-spacing="0.45"
-        filter="url(#extrude)"
-      >${escapeXml(downloadWatermark)}</text>
-      <text
-        x="${x}"
-        y="${y}"
-        text-anchor="end"
-        fill="rgba(255,255,255,0.05)"
-        stroke="rgba(255,255,255,0.22)"
-        stroke-width="0.32"
-        paint-order="stroke"
-        font-size="${fontSize}"
-        font-family="'Didot','Bodoni 72','Cormorant Garamond','Times New Roman',serif"
-        font-weight="800"
-        font-style="italic"
-        letter-spacing="0.45"
-        filter="url(#shine)"
-      >${escapeXml(downloadWatermark)}</text>
-    </svg>
-  `.trim());
-}
-
 function parseDataUrl(dataUrl) {
   const match = dataUrl.match(/^data:(.*?);base64,(.*)$/);
   if (!match) {
@@ -619,8 +556,14 @@ async function verifyStoredPhotoAssets(fileName, photoId) {
 
 async function ensurePhotoThumbnail(photo) {
   const thumbUrl = getThumbnailUrl(photo.id);
-  const uploadFileName = path.basename(photo.imageUrl);
+  const uploadFileName = path.basename(photo.imageUrl || '');
   const imageUrl = getPublicAssetUrl(getUploadObjectKey(uploadFileName), `/uploads/${uploadFileName}`);
+
+  if (!uploadFileName) {
+    const error = new Error(`Missing upload file name for photo ${photo.id}`);
+    error.code = 'ENOENT';
+    throw error;
+  }
 
   try {
     if (r2Enabled) {
@@ -657,35 +600,6 @@ async function ensurePhotoThumbnail(photo) {
     imageUrl,
     thumbUrl,
   };
-}
-
-async function normalizePhotos(photos) {
-  let metadataChanged = false;
-  let missingFilesDetected = false;
-  const normalized = [];
-
-  for (const photo of photos) {
-    try {
-      const nextPhoto = await ensurePhotoThumbnail(photo);
-      if (nextPhoto !== photo) {
-        metadataChanged = true;
-      }
-      normalized.push(nextPhoto);
-    } catch (error) {
-      if (!isMissingAssetError(error)) {
-        throw error;
-      }
-
-      missingFilesDetected = true;
-      console.warn(`Skipping photo with missing file: ${photo.id} (${photo.imageUrl})`);
-    }
-  }
-
-  if (metadataChanged && !missingFilesDetected) {
-    await writePhotos(normalized);
-  }
-
-  return normalized;
 }
 
 function normalizePhotoMetadata(photo, requestOrigin = '') {
@@ -954,12 +868,8 @@ async function handleDownloadPhoto(response, photoId) {
 
   const buffer = await readUploadBuffer(path.basename(target.imageUrl));
   const image = sharp(buffer, { failOn: 'none' }).rotate();
-  const metadata = await image.metadata();
-  const width = metadata.width || 1600;
-  const height = metadata.height || 1200;
-  const watermarkSvg = createWatermarkSvg(width, height);
   const downloadFormat = getDownloadFormat(target.mimeType, target.fileName);
-  let output = image.composite([{ input: watermarkSvg, top: 0, left: 0 }]);
+  let output = image;
 
   if (downloadFormat.format === 'png') {
     output = output.png();
@@ -975,7 +885,7 @@ async function handleDownloadPhoto(response, photoId) {
   response.writeHead(200, {
     'Content-Type': downloadFormat.contentType,
     'Content-Disposition': `attachment; filename="${sanitizeFileName(
-      `${baseName}-watermarked${downloadFormat.extension}`,
+      `${baseName}${downloadFormat.extension}`,
     )}"`,
     'Cache-Control': 'no-store',
   });
@@ -997,7 +907,8 @@ async function handlePublicPhotos(request, response) {
 
 async function handleAdminPhotos(request, response) {
   const requestOrigin = getRequestOrigin(request);
-  const photos = (await readPhotos()).map((photo) => normalizePhotoMetadata(photo, requestOrigin));
+  const photos = (await readPhotos())
+    .map((photo) => normalizePhotoMetadata(photo, requestOrigin));
   const sorted = [...photos].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const settings = await readSettings();
   sendJson(response, 200, {
@@ -1207,7 +1118,30 @@ async function handleStaticThumbnail(response, pathname) {
   const fileName = path.basename(pathname);
 
   try {
-    const buffer = await readThumbnailBuffer(fileName);
+    let buffer;
+    try {
+      buffer = await readThumbnailBuffer(fileName);
+    } catch (error) {
+      if (!isMissingAssetError(error)) {
+        throw error;
+      }
+
+      const photoId = fileName.replace(/\.webp$/i, '');
+      if (!photoId || photoId === fileName) {
+        throw error;
+      }
+
+      const photos = await readPhotos();
+      const photo = photos.find((item) => item.id === photoId);
+      if (!photo) {
+        throw error;
+      }
+
+      const sourceBuffer = await readUploadBuffer(path.basename(photo.imageUrl || ''));
+      buffer = await generateThumbnail(sourceBuffer);
+      await writeThumbnailBuffer(photo.id, buffer);
+    }
+
     response.writeHead(200, {
       'Content-Type': 'image/webp',
       'Cache-Control': 'public, max-age=31536000, immutable',

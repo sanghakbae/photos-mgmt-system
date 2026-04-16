@@ -36,11 +36,12 @@ export default function ResilientImage({
     () => [...new Set((sources || []).filter(Boolean))],
     [sources],
   );
+  const sourcesKey = useMemo(() => resolvedSources.join('\n'), [resolvedSources]);
   const [sourceIndex, setSourceIndex] = useState(0);
 
   useEffect(() => {
     setSourceIndex(0);
-  }, [resolvedSources]);
+  }, [sourcesKey]);
 
   const activeSource = resolvedSources[sourceIndex] || buildFallbackImageDataUrl(fallbackLabel);
   const exhausted = sourceIndex >= resolvedSources.length;

@@ -21,10 +21,9 @@ import {
   createInitialSystemStatus,
   getSystemStatusPresentation,
 } from '../lib/systemStatus';
+import { useBodyScrollLock } from '../lib/useBodyScrollLock';
 
-const PUBLIC_GALLERY_REFRESH_MS = 10000;
-const STATUS_REFRESH_MS = 15000;
-const DEFAULT_WATERMARK = 'totoriverce@naver.com';
+const STATUS_REFRESH_MS = 300000;
 const SLIDESHOW_SPEED_OPTIONS = [
   { label: '2초', value: 2000 },
   { label: '5초', value: 5000 },
@@ -94,12 +93,9 @@ export default function GalleryPage() {
   const [photos, setPhotos] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [selectedPhotoId, setSelectedPhotoId] = useState(null);
   const [selectedPhotoState, setSelectedPhotoState] = useState(null);
-  const [modalImageSrc, setModalImageSrc] = useState('');
-  const [modalImageLoading, setModalImageLoading] = useState(false);
   const [slideshowSpeed, setSlideshowSpeed] = useState(5000);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
   const [slideshowVisible, setSlideshowVisible] = useState(false);
@@ -119,13 +115,8 @@ export default function GalleryPage() {
     image.src = src;
   }
 
-  async function loadPublicPhotos({ silent = false } = {}) {
-    if (!silent) {
-      setLoading(true);
-    } else {
-      setRefreshing(true);
-    }
-
+  async function loadPublicPhotos() {
+    setLoading(true);
     try {
       const response = await getPublicPhotos();
       setPhotos(response);
@@ -134,11 +125,7 @@ export default function GalleryPage() {
       console.error(loadError);
       setError(loadError instanceof Error ? loadError.message : '공개 사진을 불러오지 못했습니다.');
     } finally {
-      if (!silent) {
-        setLoading(false);
-      } else {
-        setRefreshing(false);
-      }
+      setLoading(false);
     }
   }
 
@@ -166,11 +153,6 @@ export default function GalleryPage() {
     loadPhotos();
     loadSystemStatus();
 
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && !selectedPhotoId) {
-        loadPublicPhotos({ silent: true });
-      }
-    }, PUBLIC_GALLERY_REFRESH_MS);
     const statusIntervalId = window.setInterval(() => {
       if (document.visibilityState === 'visible' && !selectedPhotoId) {
         loadSystemStatus();
@@ -179,7 +161,6 @@ export default function GalleryPage() {
 
     function handleVisibilityChange() {
       if (document.visibilityState === 'visible' && !selectedPhotoId) {
-        loadPublicPhotos({ silent: true });
         loadSystemStatus();
       }
     }
@@ -188,7 +169,6 @@ export default function GalleryPage() {
 
     return () => {
       active = false;
-      window.clearInterval(intervalId);
       window.clearInterval(statusIntervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -241,6 +221,8 @@ export default function GalleryPage() {
     return source.find((photo) => photo.id === selectedPhotoId) ?? selectedPhotoState ?? null;
   }, [photos, selectedPhotoId, selectedPhotoState]);
 
+  useBodyScrollLock(Boolean(selectedPhotoId));
+
   const selectedPhotoIndex = useMemo(() => {
     if (!selectedPhotoId) {
       return -1;
@@ -258,20 +240,15 @@ export default function GalleryPage() {
     event?.preventDefault?.();
     event?.stopPropagation?.();
 
-    const previewSrc = photo.thumbUrl || photo.imageUrl || '';
     setSelectedPhotoState(photo);
     setSelectedPhotoId(photo.id);
-    setModalImageSrc(previewSrc);
-    setModalImageLoading(Boolean(photo.imageUrl && photo.imageUrl !== previewSrc));
-    preloadImage(previewSrc);
     preloadImage(photo.imageUrl);
+    preloadImage(photo.thumbUrl);
   }
 
   function closePhoto() {
     setSelectedPhotoId(null);
     setSelectedPhotoState(null);
-    setModalImageSrc('');
-    setModalImageLoading(false);
   }
 
   function moveSelectedPhoto(direction) {
@@ -283,45 +260,6 @@ export default function GalleryPage() {
       (selectedPhotoIndex + direction + displayPhotos.length) % displayPhotos.length;
     setSelectedPhotoId(displayPhotos[nextIndex]?.id ?? null);
   }
-
-  useEffect(() => {
-    if (!selectedPhoto) {
-      setModalImageSrc('');
-      setModalImageLoading(false);
-      return;
-    }
-
-    const previewSrc = selectedPhoto.thumbUrl || selectedPhoto.imageUrl;
-    setModalImageSrc(previewSrc);
-    setModalImageLoading(Boolean(selectedPhoto.imageUrl && selectedPhoto.imageUrl !== previewSrc));
-
-    if (!selectedPhoto.imageUrl || selectedPhoto.imageUrl === previewSrc) {
-      return;
-    }
-
-    let active = true;
-    const nextImage = new Image();
-    nextImage.onload = () => {
-      if (!active) {
-        return;
-      }
-
-      setModalImageSrc(selectedPhoto.imageUrl);
-      setModalImageLoading(false);
-    };
-    nextImage.onerror = () => {
-      if (!active) {
-        return;
-      }
-
-      setModalImageLoading(false);
-    };
-    nextImage.src = selectedPhoto.imageUrl;
-
-    return () => {
-      active = false;
-    };
-  }, [selectedPhoto]);
 
   useEffect(() => {
     if (!selectedPhotoId || !photos.length) {
@@ -566,12 +504,7 @@ export default function GalleryPage() {
             <button
               type="button"
               className="slideshow-photo-button"
-              onPointerUp={(event) => openPhoto(activeSlide, event)}
-              onClick={(event) => {
-                if (event.detail === 0) {
-                  openPhoto(activeSlide, event);
-                }
-              }}
+              onClick={(event) => openPhoto(activeSlide, event)}
               aria-label={`${getDisplayPhotoTitle(activeSlide)} 슬라이드 사진 크게 보기`}
               >
                 <ResilientImage
@@ -681,12 +614,7 @@ export default function GalleryPage() {
             <button
               type="button"
               className="photo-open-button"
-              onPointerUp={(event) => openPhoto(photo, event)}
-              onClick={(event) => {
-                if (event.detail === 0) {
-                  openPhoto(photo, event);
-                }
-              }}
+              onClick={(event) => openPhoto(photo, event)}
               aria-label={`${getDisplayPhotoTitle(photo)} 크게 보기`}
             >
               <div className="photo-frame">
@@ -697,7 +625,6 @@ export default function GalleryPage() {
                   loading="lazy"
                   decoding="async"
                 />
-                <span className="photo-watermark">{DEFAULT_WATERMARK}</span>
               </div>
 
               <div className="photo-content">
@@ -772,17 +699,12 @@ export default function GalleryPage() {
                     </button>
                   ) : null}
                   <ResilientImage
-                    sources={[modalImageSrc, selectedPhoto.imageUrl, selectedPhoto.thumbUrl]}
+                    sources={[selectedPhoto.imageUrl, selectedPhoto.thumbUrl]}
                     alt={getDisplayPhotoTitle(selectedPhoto)}
                     className="photo-modal-image"
                     decoding="async"
+                    onClick={() => closePhoto()}
                   />
-                  {modalImageLoading ? (
-                    <div className="photo-modal-loading-indicator">
-                      <LoaderCircle size={18} className="spin" />
-                      원본 불러오는 중
-                    </div>
-                  ) : null}
                   {hasMultipleDisplayPhotos ? (
                     <button
                       type="button"

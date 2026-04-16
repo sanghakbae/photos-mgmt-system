@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { CalendarDays, ChevronLeft, ChevronRight, Download, Images, LoaderCircle, MapPin, MessageSquareText, Search, X } from 'lucide-react';
 import ResilientImage from '../components/ResilientImage';
 import { getPhotoDownloadUrl, getPublicPhotos, getPublicSystemStatus } from '../lib/galleryApi';
@@ -9,9 +10,9 @@ import {
   createInitialSystemStatus,
   getSystemStatusPresentation,
 } from '../lib/systemStatus';
+import { useBodyScrollLock } from '../lib/useBodyScrollLock';
 
-const PUBLIC_GALLERY_REFRESH_MS = 10000;
-const STATUS_REFRESH_MS = 15000;
+const STATUS_REFRESH_MS = 300000;
 const SLIDESHOW_SPEED_OPTIONS = [
   { label: '2초', value: 2000 },
   { label: '5초', value: 5000 },
@@ -30,7 +31,6 @@ export default function MobileGalleryPage() {
   const [photos, setPhotos] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [selectedPhoto, setSelectedPhoto] = useState(null);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
@@ -40,13 +40,8 @@ export default function MobileGalleryPage() {
   const [systemStatus, setSystemStatus] = useState(() => createInitialSystemStatus());
   const slideshowTouchStartRef = useRef(null);
 
-  async function loadPublicGallery({ silent = false } = {}) {
-    if (!silent) {
-      setLoading(true);
-    } else {
-      setRefreshing(true);
-    }
-
+  async function loadPublicGallery() {
+    setLoading(true);
     try {
       const nextPhotos = await getPublicPhotos();
       setPhotos(nextPhotos);
@@ -55,11 +50,7 @@ export default function MobileGalleryPage() {
       console.error(loadError);
       setError(loadError instanceof Error ? loadError.message : '공개 사진을 불러오지 못했습니다.');
     } finally {
-      if (!silent) {
-        setLoading(false);
-      } else {
-        setRefreshing(false);
-      }
+      setLoading(false);
     }
   }
 
@@ -87,12 +78,6 @@ export default function MobileGalleryPage() {
 
     boot();
 
-    const galleryInterval = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && !selectedPhoto) {
-        loadPublicGallery({ silent: true });
-      }
-    }, PUBLIC_GALLERY_REFRESH_MS);
-
     const statusInterval = window.setInterval(() => {
       if (document.visibilityState === 'visible' && !selectedPhoto) {
         loadSystemStatus();
@@ -101,7 +86,6 @@ export default function MobileGalleryPage() {
 
     return () => {
       active = false;
-      window.clearInterval(galleryInterval);
       window.clearInterval(statusInterval);
     };
   }, [selectedPhoto]);
@@ -127,6 +111,8 @@ export default function MobileGalleryPage() {
     }
     return displayPhotos.findIndex((photo) => photo.id === selectedPhoto.id);
   }, [displayPhotos, selectedPhoto]);
+
+  useBodyScrollLock(Boolean(selectedPhoto));
 
   const hasMultiplePhotos = displayPhotos.length > 1;
   const activeSlide = displayPhotos[activeSlideIndex] ?? displayPhotos[0] ?? null;
@@ -250,7 +236,6 @@ export default function MobileGalleryPage() {
               <h1>그날의 기록</h1>
               <p className="mobile-public-subtitle">
                 공개 사진 {photos.length}장
-                {refreshing ? ' · 새로고침 중' : ''}
               </p>
             </div>
             <div className={statusClassName} title={systemStatus.message}>
@@ -278,6 +263,9 @@ export default function MobileGalleryPage() {
               >
                 슬라이드 보기
               </button>
+              <Link className="secondary-button topbar-action-button" to="/admin">
+                관리자
+              </Link>
             </div>
           </section>
 
@@ -301,12 +289,7 @@ export default function MobileGalleryPage() {
             <button
               type="button"
               className="mobile-public-slideshow-photo"
-              onPointerUp={() => setSelectedPhoto(activeSlide)}
-              onClick={(event) => {
-                if (event.detail === 0) {
-                  setSelectedPhoto(activeSlide);
-                }
-              }}
+              onClick={() => setSelectedPhoto(activeSlide)}
             >
               <ResilientImage
                 sources={[activeSlide.imageUrl, activeSlide.thumbUrl]}
@@ -381,12 +364,7 @@ export default function MobileGalleryPage() {
             key={photo.id}
             type="button"
             className="mobile-public-card"
-            onPointerUp={() => setSelectedPhoto(photo)}
-            onClick={(event) => {
-              if (event.detail === 0) {
-                setSelectedPhoto(photo);
-              }
-            }}
+            onClick={() => setSelectedPhoto(photo)}
           >
             <div className="mobile-public-photo-frame">
               <ResilientImage
@@ -469,6 +447,7 @@ export default function MobileGalleryPage() {
                 className="mobile-public-modal-image"
                 alt={getDisplayPhotoTitle(selectedPhoto)}
                 decoding="async"
+                onClick={() => setSelectedPhoto(null)}
               />
               {hasMultiplePhotos ? (
                 <button
