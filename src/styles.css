@@ -1428,6 +1428,7 @@ a {
   position: relative;
   min-height: 100vh;
   padding: 10px 8px 24px;
+  overflow-x: clip;
 }
 
 .admin-layout,
@@ -1437,6 +1438,7 @@ a {
   width: 100%;
   max-width: none;
   margin: 0 auto;
+  min-width: 0;
 }
 
 .admin-login-card,
@@ -1451,10 +1453,27 @@ a {
 }
 
 .admin-login-card {
-  max-width: 720px;
-  margin-top: 48px;
-  padding: 28px;
+  display: grid;
+  gap: 14px;
+  max-width: 620px;
+  margin-top: 40px;
+  padding: 24px 24px 22px;
   border-radius: 18px;
+}
+
+.admin-login-card .eyebrow,
+.admin-login-card h1,
+.admin-login-card .hero-text {
+  margin: 0;
+}
+
+.admin-login-card h1 {
+  line-height: 1.08;
+}
+
+.admin-login-card .hero-text {
+  max-width: none;
+  line-height: 1.28;
 }
 
 .admin-login-actions,
@@ -1469,6 +1488,12 @@ a {
 
 .google-login-slot {
   min-height: 44px;
+}
+
+.admin-login-card .admin-hint,
+.admin-login-card .admin-back-link,
+.admin-login-card .error-banner {
+  margin: 0;
 }
 
 .admin-hint,
@@ -1523,21 +1548,22 @@ a {
 
 .admin-summary-card {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 8px;
   padding: 8px;
   border-radius: 8px;
+  min-width: 0;
 }
 
 .admin-summary-card .stat-card span {
-  font-size: 0.64rem;
+  font-size: 0.58rem;
 }
 
 .admin-summary-card .stat-card strong {
   margin-top: 4px;
-  font-size: 0.84rem;
-  line-height: 1.2;
+  font-size: 0.74rem;
+  line-height: 1.16;
 }
 
 .admin-photos-sync {
@@ -1548,6 +1574,7 @@ a {
   margin-top: 8px;
   padding: 8px 10px;
   border-radius: 8px;
+  min-width: 0;
 }
 
 .admin-photos-import {
@@ -1568,6 +1595,7 @@ a {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   margin-top: 8px;
+  min-width: 0;
 }
 
 .admin-similar-pair-grid {
@@ -1720,6 +1748,7 @@ a {
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
+  max-width: 100%;
 }
 
 .admin-loading {
@@ -1814,7 +1843,7 @@ a {
   }
 
   .admin-summary-card {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .admin-photos-sync,
@@ -1825,6 +1854,10 @@ a {
 }
 
 @media (max-width: 720px) {
+  .admin-shell {
+    padding: max(10px, env(safe-area-inset-top)) 10px calc(24px + env(safe-area-inset-bottom));
+  }
+
   .app-shell {
     padding: max(10px, env(safe-area-inset-top)) 10px calc(36px + env(safe-area-inset-bottom));
   }
@@ -2030,6 +2063,36 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .admin-similar-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .admin-summary-card,
+  .admin-debug-panel,
+  .admin-topbar,
+  .admin-photos-sync,
+  .admin-photo-card {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .admin-topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .admin-topbar-actions {
+    width: auto;
+    justify-self: end;
+    justify-content: flex-end;
+  }
+
+  .admin-topbar-actions > * {
+    width: auto;
+  }
+
   .photo-modal-backdrop {
     padding: 6px;
   }
@@ -2096,6 +2159,11 @@ a {
 }
 
 @media (max-width: 480px) {
+  .admin-shell {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
   .search-field input {
     font-size: 0.86rem;
   }
@@ -2166,5 +2234,9 @@ a {
 
   .admin-photo-preview {
     aspect-ratio: 1.18 / 1;
+  }
+
+  .admin-field textarea {
+    min-height: 53px;
   }
 }

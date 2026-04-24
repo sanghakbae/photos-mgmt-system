@@ -345,6 +345,19 @@ export default function MobileGalleryPage() {
     }
   }
 
+  function closeSlideshowToGallery(event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    setSlideshowVisible(false);
+    setSelectedPhoto(null);
+  }
+
+  function handleSlideshowSpeedChange(event, speed) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    setSlideshowSpeed(speed);
+  }
+
   return (
     <div
       className={`mobile-public-shell ${
@@ -401,9 +414,14 @@ export default function MobileGalleryPage() {
       ) : null}
 
       {slideshowVisible && activeSlide ? (
-        <section className="mobile-public-slideshow">
+        <section
+          className="mobile-public-slideshow"
+          onPointerUp={closeSlideshowToGallery}
+          onClick={closeSlideshowToGallery}
+        >
           <div
             className="mobile-public-slideshow-stage"
+            onPointerDown={(event) => event.stopPropagation()}
             onTouchStart={handleSlideshowTouchStart}
             onTouchEnd={handleSlideshowTouchEnd}
           >
@@ -415,7 +433,8 @@ export default function MobileGalleryPage() {
             <button
               type="button"
               className="mobile-public-slideshow-photo"
-              onClick={() => setSelectedPhoto(activeSlide)}
+              onPointerUp={closeSlideshowToGallery}
+              onClick={closeSlideshowToGallery}
             >
               <ResilientImage
                 sources={[activeSlide.thumbUrl, activeSlide.imageUrl]}
@@ -426,20 +445,27 @@ export default function MobileGalleryPage() {
             <button
               type="button"
               className="icon-button mobile-public-slideshow-close"
-              onClick={() => setSlideshowVisible(false)}
+              onPointerUp={closeSlideshowToGallery}
+              onClick={closeSlideshowToGallery}
               aria-label="슬라이드쇼 닫기"
             >
               <X size={18} />
             </button>
           </div>
-          <div className="mobile-public-slideshow-controls">
+          <div
+            className="mobile-public-slideshow-controls"
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="slideshow-speed-selector" role="radiogroup" aria-label="모바일 슬라이드쇼 속도">
               {SLIDESHOW_SPEED_OPTIONS.map((option) => (
                 <button
                   key={option.value}
                   type="button"
                   className={`slideshow-speed-button ${slideshowSpeed === option.value ? 'is-active' : ''}`}
-                  onClick={() => setSlideshowSpeed(option.value)}
+                  onPointerUp={(event) => handleSlideshowSpeedChange(event, option.value)}
+                  onClick={(event) => handleSlideshowSpeedChange(event, option.value)}
                 >
                   {option.label}
                 </button>
@@ -451,7 +477,8 @@ export default function MobileGalleryPage() {
             <button
               type="button"
               className="secondary-button topbar-action-button"
-              onClick={() => setSlideshowVisible(false)}
+              onPointerUp={closeSlideshowToGallery}
+              onClick={closeSlideshowToGallery}
             >
               갤러리 보기
             </button>

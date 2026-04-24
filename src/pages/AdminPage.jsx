@@ -61,9 +61,40 @@ function canRenderPreviewInBrowser(file) {
   return !/\.(heic|heif)$/i.test(file.name ?? '');
 }
 
+function isMobileUploadEnvironment() {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const userAgent = navigator.userAgent || '';
+  const agentMobile = /Android|iPhone|iPad|iPod|Mobile|CriOS|FxiOS|SamsungBrowser/i.test(userAgent);
+  const coarsePointer =
+    typeof window.matchMedia === 'function'
+      ? window.matchMedia('(hover: none) and (pointer: coarse)').matches
+      : false;
+
+  return agentMobile || coarsePointer;
+}
+
 const uploadConcurrency = 3;
 const UPLOAD_RECOVERY_KEY = 'photo-upload-recovery';
-const SIMILAR_HASH_DISTANCE = 8;
+const SIMILAR_HASH_DISTANCE = 4;
+const MOBILE_METADATA_CONCURRENCY = 1;
+const MOBILE_UPLOAD_CONCURRENCY = 2;
+const MOBILE_SKIP_SIMILAR_SCAN_THRESHOLD = 12;
+const EXIF_PICK_FIELDS = [
+  'DateTimeOriginal',
+  'CreateDate',
+  'ModifyDate',
+  'latitude',
+  'longitude',
+  'lat',
+  'lon',
+  'GPSLatitude',
+  'GPSLongitude',
+  'GPSLatitudeRef',
+  'GPSLongitudeRef',
+];
 
 async function mapWithConcurrency(items, concurrency, worker) {
   const results = new Array(items.length);
@@ -97,6 +128,84 @@ function toIsoDateOrEmpty(value) {
 
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? '' : date.toISOString();
+}
+
+function toDecimalCoordinate(value, ref) {
+  if (typeof value === 'number') {
+    return value;
+  }
+
+  if (Array.isArray(value) && value.length === 3) {
+    const [degrees, minutes, seconds] = value.map((entry) => Number(entry || 0));
+    if ([degrees, minutes, seconds].some((entry) => Number.isNaN(entry))) {
+      return null;
+    }
+
+    const absolute = Math.abs(degrees) + (minutes / 60) + (seconds / 3600);
+    const direction = String(ref || '').toUpperCase();
+    return direction === 'S' || direction === 'W' ? -absolute : absolute;
+  }
+
+  return null;
+}
+
+function extractCoordinates(metadata) {
+  const latitude =
+    metadata?.latitude ??
+    metadata?.lat ??
+    toDecimalCoordinate(metadata?.GPSLatitude, metadata?.GPSLatitudeRef);
+  const longitude =
+    metadata?.longitude ??
+    metadata?.lon ??
+    toDecimalCoordinate(metadata?.GPSLongitude, metadata?.GPSLongitudeRef);
+
+  return {
+    latitude: typeof latitude === 'number' && !Number.isNaN(latitude) ? latitude : null,
+    longitude: typeof longitude === 'number' && !Number.isNaN(longitude) ? longitude : null,
+  };
+}
+
+async function parseUploadExifMetadata(file) {
+  const quickMetadata = await exifr.parse(file, {
+    chunked: true,
+    firstChunkSize: 65536,
+    firstChunkSizeNode: 65536,
+    reviveValues: false,
+    sanitize: true,
+    pick: EXIF_PICK_FIELDS,
+  });
+
+  let metadata = quickMetadata ?? {};
+  let { latitude, longitude } = extractCoordinates(metadata);
+  let capturedDate =
+    metadata?.DateTimeOriginal ??
+    metadata?.CreateDate ??
+    metadata?.ModifyDate ??
+    null;
+
+  if (latitude === null || longitude === null || !capturedDate) {
+    const fullMetadata = await exifr.parse(file, {
+      reviveValues: false,
+      sanitize: true,
+      pick: EXIF_PICK_FIELDS,
+    });
+
+    if (fullMetadata) {
+      metadata = fullMetadata;
+      ({ latitude, longitude } = extractCoordinates(fullMetadata));
+      capturedDate =
+        fullMetadata?.DateTimeOriginal ??
+        fullMetadata?.CreateDate ??
+        fullMetadata?.ModifyDate ??
+        capturedDate;
+    }
+  }
+
+  return {
+    latitude,
+    longitude,
+    capturedDate,
+  };
 }
 
 async function computeFileSha256(file) {
@@ -261,14 +370,10 @@ function AdminLogin({ error, loading, onLogin, buttonContainerRef }) {
       <p className="eyebrow">Admin</p>
       <h1>관리자 페이지</h1>
       <p className="hero-text">
-        관리자만 Google 계정으로 로그인해서 사진을 업로드하고 제목, 메모, 위치를 수정할 수 있습니다.
+        관리자만 Google 계정으로 로그인해 사진을 관리할 수 있습니다.
       </p>
       <div className="admin-login-actions">
         <div ref={buttonContainerRef} className="google-login-slot" />
-        <button type="button" className="secondary-button" onClick={onLogin} disabled={loading}>
-          {loading ? <LoaderCircle size={18} className="spin" /> : <ShieldCheck size={18} />}
-          Google 로그인 다시 시도
-        </button>
       </div>
       {error ? <p className="error-banner admin-error">{error}</p> : null}
       <p className="admin-hint">
@@ -297,6 +402,12 @@ export default function AdminPage() {
   const [preparingUpload, setPreparingUpload] = useState(false);
   const [scanningSimilar, setScanningSimilar] = useState(false);
   const [deletingSimilar, setDeletingSimilar] = useState(false);
+  const [similarScanProgress, setSimilarScanProgress] = useState({
+    current: 0,
+    total: 0,
+    title: '',
+    detail: '',
+  });
   const [uploadProgress, setUploadProgress] = useState({
     current: 0,
     total: 0,
@@ -545,11 +656,14 @@ export default function AdminPage() {
     }
 
     try {
+      const effectiveUploadConcurrency = isMobileUploadEnvironment()
+        ? MOBILE_UPLOAD_CONCURRENCY
+        : uploadConcurrency;
       let completedUploadCount = 0;
       let uploadedCount = 0;
       let duplicateCount = 0;
       let failedCount = 0;
-      const uploadedPhotos = await mapWithConcurrency(preparedFiles, uploadConcurrency, async (item) => {
+      const uploadedPhotos = await mapWithConcurrency(preparedFiles, effectiveUploadConcurrency, async (item) => {
         if (item.isDuplicate) {
           completedUploadCount += 1;
           duplicateCount += 1;
@@ -699,6 +813,9 @@ export default function AdminPage() {
     try {
       const supportedFiles = selectedFiles.filter(isSupportedUploadFile);
       const existingHashes = new Set(photos.map((photo) => photo.sha256).filter(Boolean));
+      const isMobileUpload = isMobileUploadEnvironment();
+      const metadataConcurrency = isMobileUpload ? MOBILE_METADATA_CONCURRENCY : 4;
+      const skipSimilarScan = isMobileUpload && supportedFiles.length > MOBILE_SKIP_SIMILAR_SCAN_THRESHOLD;
 
       if (supportedFiles.length === 0) {
         setError('지원되는 이미지 형식(jpg, png, webp, heic)을 업로드해 주세요.');
@@ -706,18 +823,56 @@ export default function AdminPage() {
       }
 
       let completedMetadataCount = 0;
-      const preparedFiles = await Promise.all(
-        supportedFiles.map(async (file) => {
+      const preparedFiles = await mapWithConcurrency(
+        supportedFiles,
+        metadataConcurrency,
+        async (file) => {
           const sha256 = await computeFileSha256(file);
-          const visualHash = await computeVisualHash(file);
-          const metadata = await exifr.parse(file, {
-            chunked: true,
-            firstChunkSize: 65536,
-            firstChunkSizeNode: 65536,
-            reviveValues: false,
-            sanitize: true,
-            pick: ['DateTimeOriginal', 'CreateDate', 'ModifyDate', 'latitude', 'longitude', 'lat', 'lon'],
-          });
+          const isDuplicate = existingHashes.has(sha256);
+
+          if (isDuplicate) {
+            completedMetadataCount += 1;
+            setUploadProgress({
+              current: completedMetadataCount,
+              total: supportedFiles.length * 2,
+              title: file.name,
+              detail: '메타데이터 확인 완료',
+            });
+
+            return {
+              id: `${file.name}-${sha256.slice(0, 8)}`,
+              file,
+              previewUrl: canRenderPreviewInBrowser(file) ? URL.createObjectURL(file) : '',
+              previewUnavailable: !canRenderPreviewInBrowser(file),
+              sha256,
+              visualHash: '',
+              include: false,
+              isDuplicate: true,
+              similarToId: null,
+              similarDistance: null,
+              meta: {
+                title: createDefaultPhotoTitle({
+                  fileName: file.name,
+                  capturedAt: '',
+                  locationText: '',
+                }),
+                fileName: file.name,
+                note: '',
+                capturedAt: '',
+                locationText: '',
+                coordinatesText: '',
+                mapsUrl: '',
+                seasonLabel: '',
+              },
+            };
+          }
+
+          const visualHash = skipSimilarScan ? '' : await computeVisualHash(file);
+          const {
+            latitude,
+            longitude,
+            capturedDate,
+          } = await parseUploadExifMetadata(file);
 
           completedMetadataCount += 1;
           setUploadProgress({
@@ -727,14 +882,6 @@ export default function AdminPage() {
             detail: '메타데이터 확인 완료',
           });
 
-          const latitude = metadata?.latitude ?? metadata?.lat ?? null;
-          const longitude = metadata?.longitude ?? metadata?.lon ?? null;
-          const capturedDate =
-            metadata?.DateTimeOriginal ??
-            metadata?.CreateDate ??
-            metadata?.ModifyDate ??
-            null;
-
           return {
             id: `${file.name}-${sha256.slice(0, 8)}`,
             file,
@@ -742,8 +889,8 @@ export default function AdminPage() {
             previewUnavailable: !canRenderPreviewInBrowser(file),
             sha256,
             visualHash,
-            include: !existingHashes.has(sha256),
-            isDuplicate: existingHashes.has(sha256),
+            include: true,
+            isDuplicate: false,
             similarToId: null,
             similarDistance: null,
             meta: {
@@ -761,7 +908,7 @@ export default function AdminPage() {
               seasonLabel: capturedDate ? getSeasonLabel(new Date(capturedDate)) : '',
             },
           };
-        }),
+        },
       );
 
       const reviewedFiles = preparedFiles.map((item, index, allItems) => {
@@ -769,9 +916,13 @@ export default function AdminPage() {
           return item;
         }
 
+        if (!item.visualHash) {
+          return item;
+        }
+
         for (let previousIndex = 0; previousIndex < index; previousIndex += 1) {
           const previousItem = allItems[previousIndex];
-          if (previousItem.isDuplicate) {
+          if (previousItem.isDuplicate || !previousItem.visualHash) {
             continue;
           }
 
@@ -790,6 +941,7 @@ export default function AdminPage() {
 
       const exactDuplicateCount = reviewedFiles.filter((item) => item.isDuplicate).length;
       const similarCandidateCount = reviewedFiles.filter((item) => item.similarToId).length;
+      const uploadableCount = reviewedFiles.filter((item) => item.include && !item.isDuplicate).length;
       setPendingUploadBatch((current) => {
         if (current) {
           revokePreviewUrls(current.items);
@@ -800,10 +952,12 @@ export default function AdminPage() {
           total: reviewedFiles.length,
           exactDuplicateCount,
           similarCandidateCount,
+          uploadableCount,
+          skippedSimilarScan: skipSimilarScan,
         };
       });
       setError(
-        `완전 중복 ${exactDuplicateCount}개는 자동으로 건너뜁니다.${similarCandidateCount > 0 ? ` 유사 사진 후보 ${similarCandidateCount}개는 업로드 전에 선택해서 제외할 수 있습니다.` : ''}`,
+        `총 ${reviewedFiles.length}개 중 업로드 예정 ${uploadableCount}개, 완전 중복 ${exactDuplicateCount}개${skipSimilarScan ? ', 모바일 대량 업로드라 유사 검사는 생략했습니다.' : similarCandidateCount > 0 ? `, 유사 후보 ${similarCandidateCount}개` : ''}`,
       );
     } catch (uploadError) {
       console.error(uploadError);
@@ -986,15 +1140,37 @@ export default function AdminPage() {
 
     setScanningSimilar(true);
     setError('');
+    setSimilarScanProgress({
+      current: 0,
+      total: photos.length,
+      title: '',
+      detail: '유사 사진 해시를 준비하는 중입니다.',
+    });
 
     try {
-      const photoHashes = (await mapWithConcurrency(photos, 4, async (photo) => {
+      let processedCount = 0;
+      const photoHashes = (await mapWithConcurrency(photos, isMobileUploadEnvironment() ? 2 : 8, async (photo) => {
         try {
-          return {
+          const result = {
             photo,
             visualHash: await computeVisualHashFromUrls([photo.thumbUrl, photo.imageUrl]),
           };
+          processedCount += 1;
+          setSimilarScanProgress({
+            current: processedCount,
+            total: photos.length,
+            title: photo.fileName || getDisplayPhotoTitle(photo),
+            detail: '유사 사진 해시 계산 중',
+          });
+          return result;
         } catch (photoError) {
+          processedCount += 1;
+          setSimilarScanProgress({
+            current: processedCount,
+            total: photos.length,
+            title: photo.fileName || getDisplayPhotoTitle(photo),
+            detail: '읽지 못한 사진을 건너뛰는 중',
+          });
           console.warn(photoError);
           return null;
         }
@@ -1044,14 +1220,18 @@ export default function AdminPage() {
       setSelectedSimilarIds([]);
       setError(
         groups.length > 0
-          ? `유사 사진 후보 묶음 ${groups.length}개를 찾았습니다.${skippedCount > 0 ? ` 읽지 못한 사진 ${skippedCount}개는 건너뛰었습니다.` : ''} 유지할 사진만 남기고 나머지를 선택해서 제외할 수 있습니다.`
-          : `유사 사진 후보를 찾지 못했습니다.${skippedCount > 0 ? ` 읽지 못한 사진 ${skippedCount}개는 건너뛰었습니다.` : ''}`,
+          ? `시각적으로 비슷한 사진 묶음 ${groups.length}개를 찾았습니다.${skippedCount > 0 ? ` 읽지 못한 사진 ${skippedCount}개는 건너뛰었습니다.` : ''} 완전 중복은 아니므로, 비교 기준과 삭제 후보를 직접 확인해 주세요.`
+          : `시각적으로 비슷한 사진 후보를 찾지 못했습니다.${skippedCount > 0 ? ` 읽지 못한 사진 ${skippedCount}개는 건너뛰었습니다.` : ''}`,
       );
     } catch (scanError) {
       console.error(scanError);
       setError(scanError instanceof Error ? scanError.message : '유사 사진 검사 중 문제가 발생했습니다.');
     } finally {
       setScanningSimilar(false);
+      setSimilarScanProgress((current) => ({
+        ...current,
+        detail: current.total > 0 ? '유사 사진 검사 결과가 준비되었습니다.' : '',
+      }));
     }
   }
 
@@ -1079,7 +1259,6 @@ export default function AdminPage() {
             <div>
               <p className="eyebrow">Admin</p>
               <h1>갤러리 관리</h1>
-              <p className="admin-subtitle">{session.name ?? session.email} 계정으로 로그인됨</p>
             </div>
 
             <div className="admin-topbar-actions">
@@ -1178,13 +1357,18 @@ export default function AdminPage() {
               const completedPercent = uploadProgress.fileTotal > 0
                 ? Math.round((completedFileCount / uploadProgress.fileTotal) * 100)
                 : 0;
+              const similarCompletedPercent = similarScanProgress.total > 0
+                ? Math.round((similarScanProgress.current / similarScanProgress.total) * 100)
+                : 0;
 
               return (
                 <>
             <div className="admin-progress-head">
               <div className="admin-progress-copy">
                 <p className="admin-loading">
-                  {uploading
+                  {scanningSimilar
+                    ? `유사 사진 검사 중: ${similarScanProgress.current}/${similarScanProgress.total} (${similarCompletedPercent}%)`
+                    : uploading
                     ? `업로드 중: ${uploadProgress.fileTotal > 0
                         ? uploadProgress.uploaded + uploadProgress.duplicate + uploadProgress.failed
                         : 0}/${uploadProgress.fileTotal > 0 ? uploadProgress.fileTotal : 0} (${uploadProgress.fileTotal > 0
@@ -1193,13 +1377,15 @@ export default function AdminPage() {
                     : '업로드 대기 중'}
                 </p>
                 <p className="admin-progress-detail-text">
-                  {uploading
+                  {scanningSimilar
+                    ? `${similarScanProgress.title ? `${similarScanProgress.title} · ` : ''}${similarScanProgress.detail || ''}`
+                    : uploading
                     ? `${uploadProgress.title ? `${uploadProgress.title} · ` : ''}${uploadProgress.detail || ''}`
                     : '업로드 결과가 여기에 표시됩니다.'}
                 </p>
               </div>
               <span className="admin-progress-percent">
-                {completedPercent}
+                {scanningSimilar ? similarCompletedPercent : completedPercent}
                 %
               </span>
             </div>
@@ -1207,7 +1393,7 @@ export default function AdminPage() {
               <div
                 className="admin-progress-fill"
                 style={{
-                  width: `${completedPercent}%`,
+                  width: `${scanningSimilar ? similarCompletedPercent : completedPercent}%`,
                 }}
               />
             </div>
@@ -1227,7 +1413,7 @@ export default function AdminPage() {
                     onClick={handleConfirmPendingUpload}
                   >
                     <CheckSquare size={16} />
-                    선택한 사진 업로드
+                    {`선택한 사진 업로드 (${pendingUploadBatch.uploadableCount})`}
                   </button>
                   <button
                     type="button"
@@ -1241,7 +1427,26 @@ export default function AdminPage() {
               </div>
               <p className="admin-progress-detail-text">
                 완전 중복은 자동으로 건너뜁니다. 유사 후보는 체크를 끄면 업로드에서 제외됩니다.
+                {pendingUploadBatch.skippedSimilarScan ? ' 모바일 대량 업로드에서는 속도를 위해 유사 검사를 생략했습니다.' : ''}
               </p>
+              <div className="admin-summary-card">
+                <div className="stat-card stat-card-compact">
+                  <span>선택 파일</span>
+                  <strong>{pendingUploadBatch.total}</strong>
+                </div>
+                <div className="stat-card stat-card-compact">
+                  <span>업로드 예정</span>
+                  <strong>{pendingUploadBatch.uploadableCount}</strong>
+                </div>
+                <div className="stat-card stat-card-compact">
+                  <span>완전 중복</span>
+                  <strong>{pendingUploadBatch.exactDuplicateCount}</strong>
+                </div>
+                <div className="stat-card stat-card-compact">
+                  <span>유사 후보</span>
+                  <strong>{pendingUploadBatch.skippedSimilarScan ? '생략' : pendingUploadBatch.similarCandidateCount}</strong>
+                </div>
+              </div>
               <div className="admin-grid">
                 {pendingUploadBatch.items.map((item) => (
                   <article className="admin-photo-card" key={item.id}>
@@ -1264,7 +1469,7 @@ export default function AdminPage() {
                         <span>{item.file.name}</span>
                         <span>
                           {item.isDuplicate
-                            ? '완전 중복'
+                            ? '완전 중복 · 자동 제외'
                             : item.similarToId
                               ? `유사 후보 · 거리 ${item.similarDistance}`
                               : '업로드 예정'}
@@ -1276,8 +1481,12 @@ export default function AdminPage() {
                         disabled={item.isDuplicate}
                         onClick={() => handleTogglePendingUpload(item.id)}
                       >
-                        {item.include ? <CheckSquare size={16} /> : <Square size={16} />}
-                        {item.include ? '업로드 포함' : '업로드 제외'}
+                        {item.isDuplicate ? <CheckSquare size={16} /> : item.include ? <CheckSquare size={16} /> : <Square size={16} />}
+                        {item.isDuplicate
+                          ? '중복으로 제외됨'
+                          : item.include
+                            ? '업로드 포함'
+                            : '업로드 제외'}
                       </button>
                     </div>
                   </article>
@@ -1322,11 +1531,11 @@ export default function AdminPage() {
                 </div>
               </div>
               <p className="admin-progress-detail-text">
-                각 묶음의 첫 사진은 비교 기준입니다. 삭제할 파일만 직접 선택한 뒤 한 번에 삭제할 수 있습니다.
+                왼쪽은 남길 비교 기준 사진, 오른쪽은 비슷하다고 잡힌 삭제 후보 사진입니다. 완전 중복은 아니므로 직접 보고 삭제할 파일만 선택해 주세요.
               </p>
               {similarGroups.map((group, groupIndex) => (
                 <div className="admin-card-actions" key={group.id}>
-                  <strong>유사 묶음 {groupIndex + 1}</strong>
+                  <strong>비슷한 사진 묶음 {groupIndex + 1}</strong>
                   <div className="admin-similar-pair-grid">
                     {group.items.slice(1).map((item) => {
                       const checked = selectedSimilarIds.includes(item.id);
@@ -1343,11 +1552,11 @@ export default function AdminPage() {
                             </div>
                             <div className="admin-photo-fields">
                               <div className="tag-row">
-                                <span className="tag muted">비교 기준</span>
+                                <span className="tag muted">왼쪽 · 비교 기준</span>
                               </div>
                               <div className="admin-photo-meta">
                                 <span>{getDisplayPhotoTitle(group.items[0])}</span>
-                                <span>기준 사진</span>
+                                <span>{group.items[0].fileName || '기준 사진'}</span>
                               </div>
                               <button
                                 type="button"
@@ -1355,7 +1564,7 @@ export default function AdminPage() {
                                 disabled
                               >
                                 <Square size={16} />
-                                비교 기준
+                                남길 사진
                               </button>
                             </div>
                           </article>
@@ -1371,11 +1580,11 @@ export default function AdminPage() {
                             </div>
                             <div className="admin-photo-fields">
                               <div className="tag-row">
-                                <span className="tag">비교 후보</span>
+                                <span className="tag">오른쪽 · 삭제 후보</span>
                               </div>
                               <div className="admin-photo-meta">
                                 <span>{getDisplayPhotoTitle(item)}</span>
-                                <span>{`유사도 거리 ${item.distance}`}</span>
+                                <span>{`${item.fileName || '후보 사진'} · 시각 유사도 ${item.distance}`}</span>
                               </div>
                               <button
                                 type="button"
@@ -1383,7 +1592,7 @@ export default function AdminPage() {
                                 onClick={() => toggleSimilarSelection(item.id)}
                               >
                                 {checked ? <CheckSquare size={16} /> : <Square size={16} />}
-                                {checked ? '삭제 선택됨' : '이 파일 삭제'}
+                                {checked ? '삭제 선택됨' : '오른쪽 사진 삭제'}
                               </button>
                             </div>
                           </article>

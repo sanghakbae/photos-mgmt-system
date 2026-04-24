@@ -386,6 +386,18 @@ export default function GalleryPage() {
     });
   }
 
+  function closeSlideshowToGallery(event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    setSlideshowVisible(false);
+  }
+
+  function handleSlideshowSpeedChange(event, speed) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    setSlideshowSpeed(speed);
+  }
+
   function handleSlideshowTouchStart(event) {
     slideshowTouchStartRef.current = event.changedTouches?.[0]?.clientX ?? null;
   }
@@ -571,9 +583,14 @@ export default function GalleryPage() {
       ) : null}
 
       {slideshowVisible && activeSlide ? (
-        <section className="hero-panel slideshow-panel">
+        <section
+          className="hero-panel slideshow-panel"
+          onPointerUp={closeSlideshowToGallery}
+          onClick={closeSlideshowToGallery}
+        >
           <div
             className="slideshow-stage"
+            onPointerDown={(event) => event.stopPropagation()}
             onTouchStart={handleSlideshowTouchStart}
             onTouchEnd={handleSlideshowTouchEnd}
           >
@@ -585,8 +602,9 @@ export default function GalleryPage() {
             <button
               type="button"
               className="slideshow-photo-button"
-              onClick={(event) => openPhoto(activeSlide, event)}
-              aria-label={`${getDisplayPhotoTitle(activeSlide)} 슬라이드 사진 크게 보기`}
+              onPointerUp={closeSlideshowToGallery}
+              onClick={closeSlideshowToGallery}
+              aria-label={`${getDisplayPhotoTitle(activeSlide)} 슬라이드쇼 닫기`}
               >
                 <ResilientImage
                   sources={[activeSlide.thumbUrl, activeSlide.imageUrl]}
@@ -598,7 +616,8 @@ export default function GalleryPage() {
             <button
               type="button"
               className="icon-button slideshow-close-button"
-              onClick={() => setSlideshowVisible(false)}
+              onPointerUp={closeSlideshowToGallery}
+              onClick={closeSlideshowToGallery}
               aria-label="슬라이드쇼 닫기"
             >
               <X size={20} />
@@ -606,7 +625,12 @@ export default function GalleryPage() {
 
           </div>
 
-          <div className="slideshow-controls">
+          <div
+            className="slideshow-controls"
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+          >
             <div className="slideshow-speed-selector" role="radiogroup" aria-label="슬라이드쇼 속도">
               {SLIDESHOW_SPEED_OPTIONS.map((option) => (
                 <button
@@ -615,7 +639,8 @@ export default function GalleryPage() {
                   className={`slideshow-speed-button ${
                     slideshowSpeed === option.value ? 'is-active' : ''
                   }`}
-                  onClick={() => setSlideshowSpeed(option.value)}
+                  onPointerUp={(event) => handleSlideshowSpeedChange(event, option.value)}
+                  onClick={(event) => handleSlideshowSpeedChange(event, option.value)}
                   aria-pressed={slideshowSpeed === option.value}
                 >
                   {option.label}
