@@ -2,9 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CalendarDays,
-  ChevronLeft,
-  ChevronRight,
   Download,
+  Heart,
   Images,
   MapPin,
   MessageSquareText,
@@ -13,7 +12,14 @@ import {
 } from 'lucide-react';
 import ResilientImage from '../components/ResilientImage';
 import TransitioningModalImage from '../components/TransitioningModalImage';
-import { getPhotoDownloadUrl, getPublicPhotosPage, getPublicSystemStatus } from '../lib/galleryApi';
+import {
+  addPublicPhotoLike,
+  getPhotoDownloadUrl,
+  getPublicPhotosPage,
+  getPublicSystemStatus,
+  removePublicPhotoLike,
+} from '../lib/galleryApi';
+import { loadLikedPhotoIds, saveLikedPhotoIds } from '../lib/photoLikes';
 import { formatDate, getDisplayPhotoTitle } from '../lib/photoUtils';
 import {
   buildSystemStatusFromError,
@@ -77,6 +83,7 @@ export default function GalleryPage() {
   const [slideshowVisible, setSlideshowVisible] = useState(false);
   const [isMobileExperience, setIsMobileExperience] = useState(() => detectMobileExperience());
   const [systemStatus, setSystemStatus] = useState(() => createInitialSystemStatus());
+  const [likedPhotoIds, setLikedPhotoIds] = useState(() => loadLikedPhotoIds());
   const imagePreloadCacheRef = useRef(new Set());
   const slideshowTouchStartRef = useRef(null);
   const progressiveLoadGenerationRef = useRef(0);
@@ -264,6 +271,61 @@ export default function GalleryPage() {
   function closePhoto() {
     setSelectedPhotoId(null);
     setSelectedPhotoState(null);
+  }
+
+  function updatePhotoLikeCount(photoId, likeCount) {
+    setPhotos((current) =>
+      current.map((photo) =>
+        photo.id === photoId
+          ? { ...photo, likeCount }
+          : photo,
+      ),
+    );
+    setSelectedPhotoState((current) =>
+      current?.id === photoId
+        ? { ...current, likeCount }
+        : current,
+    );
+  }
+
+  async function togglePhotoLike(photo, event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    if (!photo?.id) {
+      return;
+    }
+
+    const liked = likedPhotoIds.has(photo.id);
+    const nextLikeCount = Math.max(0, Number(photo.likeCount || 0) + (liked ? -1 : 1));
+    const nextLikedPhotoIds = new Set(likedPhotoIds);
+    if (liked) {
+      nextLikedPhotoIds.delete(photo.id);
+    } else {
+      nextLikedPhotoIds.add(photo.id);
+    }
+
+    setLikedPhotoIds(nextLikedPhotoIds);
+    saveLikedPhotoIds(nextLikedPhotoIds);
+    updatePhotoLikeCount(photo.id, nextLikeCount);
+
+    try {
+      const response = liked
+        ? await removePublicPhotoLike(photo.id)
+        : await addPublicPhotoLike(photo.id);
+      updatePhotoLikeCount(photo.id, Math.max(0, Number(response?.likeCount || 0)));
+    } catch (error) {
+      const rollbackLikedPhotoIds = new Set(nextLikedPhotoIds);
+      if (liked) {
+        rollbackLikedPhotoIds.add(photo.id);
+      } else {
+        rollbackLikedPhotoIds.delete(photo.id);
+      }
+      setLikedPhotoIds(rollbackLikedPhotoIds);
+      saveLikedPhotoIds(rollbackLikedPhotoIds);
+      updatePhotoLikeCount(photo.id, Math.max(0, Number(photo.likeCount || 0)));
+      console.error(error);
+    }
   }
 
   function moveSelectedPhoto(direction) {
@@ -542,26 +604,6 @@ export default function GalleryPage() {
               <X size={20} />
             </button>
 
-            {hasMultipleSlides ? (
-              <>
-                <button
-                  type="button"
-                  className="icon-button slideshow-nav-button slideshow-nav-button-left"
-                  onClick={() => moveSlide(-1)}
-                  aria-label="이전 슬라이드 보기"
-                >
-                  <ChevronLeft size={20} />
-                </button>
-                <button
-                  type="button"
-                  className="icon-button slideshow-nav-button slideshow-nav-button-right"
-                  onClick={() => moveSlide(1)}
-                  aria-label="다음 슬라이드 보기"
-                >
-                  <ChevronRight size={20} />
-                </button>
-              </>
-            ) : null}
           </div>
 
           <div className="slideshow-controls">
@@ -652,6 +694,15 @@ export default function GalleryPage() {
                   <div>
                     <h2>{getDisplayPhotoTitle(photo)}</h2>
                   </div>
+                  <button
+                    type="button"
+                    className={`icon-button like-button ${likedPhotoIds.has(photo.id) ? 'is-liked' : ''}`}
+                    onClick={(event) => togglePhotoLike(photo, event)}
+                    aria-label={likedPhotoIds.has(photo.id) ? '좋아요 취소' : '좋아요'}
+                  >
+                    <Heart size={16} fill={likedPhotoIds.has(photo.id) ? 'currentColor' : 'none'} />
+                    <span>{Math.max(0, Number(photo.likeCount || 0))}</span>
+                  </button>
                 </div>
 
                 <div className="meta-list">
@@ -714,6 +765,15 @@ export default function GalleryPage() {
                 <h2>{getDisplayPhotoTitle(selectedPhoto)}</h2>
                 <div className="photo-modal-note-row">
                   <p>{selectedPhoto.note || '등록된 메모가 없습니다.'}</p>
+                  <button
+                    type="button"
+                    className={`icon-button like-button ${likedPhotoIds.has(selectedPhoto.id) ? 'is-liked' : ''}`}
+                    onClick={(event) => togglePhotoLike(selectedPhoto, event)}
+                    aria-label={likedPhotoIds.has(selectedPhoto.id) ? '좋아요 취소' : '좋아요'}
+                  >
+                    <Heart size={16} fill={likedPhotoIds.has(selectedPhoto.id) ? 'currentColor' : 'none'} />
+                    <span>{Math.max(0, Number(selectedPhoto.likeCount || 0))}</span>
+                  </button>
                   {!selectedPhoto.isPlaceholder ? (
                     <a
                       className="secondary-button topbar-action-button photo-download-button"

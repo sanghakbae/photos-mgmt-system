@@ -1,9 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarDays, ChevronLeft, ChevronRight, Download, Images, MapPin, MessageSquareText, Search, X } from 'lucide-react';
+import {
+  CalendarDays,
+  Download,
+  Heart,
+  Images,
+  MapPin,
+  MessageSquareText,
+  Search,
+  X,
+} from 'lucide-react';
 import ResilientImage from '../components/ResilientImage';
 import TransitioningModalImage from '../components/TransitioningModalImage';
-import { getPhotoDownloadUrl, getPublicPhotosPage, getPublicSystemStatus } from '../lib/galleryApi';
+import {
+  addPublicPhotoLike,
+  getPhotoDownloadUrl,
+  getPublicPhotosPage,
+  getPublicSystemStatus,
+  removePublicPhotoLike,
+} from '../lib/galleryApi';
+import { loadLikedPhotoIds, saveLikedPhotoIds } from '../lib/photoLikes';
 import { formatDate, getDisplayPhotoTitle } from '../lib/photoUtils';
 import {
   buildSystemStatusFromError,
@@ -43,6 +59,7 @@ export default function MobileGalleryPage() {
   const [slideshowSpeed, setSlideshowSpeed] = useState(5000);
   const [isLandscapeViewport, setIsLandscapeViewport] = useState(() => isMobileLandscapeViewport());
   const [systemStatus, setSystemStatus] = useState(() => createInitialSystemStatus());
+  const [likedPhotoIds, setLikedPhotoIds] = useState(() => loadLikedPhotoIds());
   const slideshowTouchStartRef = useRef(null);
   const progressiveLoadGenerationRef = useRef(0);
 
@@ -271,6 +288,63 @@ export default function MobileGalleryPage() {
     );
   }
 
+  function updatePhotoLikeCount(photoId, likeCount) {
+    setPhotos((current) =>
+      current.map((photo) => (
+        photo.id === photoId
+          ? { ...photo, likeCount }
+          : photo
+      )),
+    );
+    setSelectedPhoto((current) => (
+      current?.id === photoId
+        ? { ...current, likeCount }
+        : current
+    ));
+  }
+
+  async function togglePhotoLike(photo, event) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    if (!photo?.id) {
+      return;
+    }
+
+    const liked = likedPhotoIds.has(photo.id);
+    const nextLikeCount = Math.max(0, Number(photo.likeCount || 0) + (liked ? -1 : 1));
+    const nextLikedPhotoIds = new Set(likedPhotoIds);
+
+    if (liked) {
+      nextLikedPhotoIds.delete(photo.id);
+    } else {
+      nextLikedPhotoIds.add(photo.id);
+    }
+
+    setLikedPhotoIds(nextLikedPhotoIds);
+    saveLikedPhotoIds(nextLikedPhotoIds);
+    updatePhotoLikeCount(photo.id, nextLikeCount);
+
+    try {
+      const response = liked
+        ? await removePublicPhotoLike(photo.id)
+        : await addPublicPhotoLike(photo.id);
+      updatePhotoLikeCount(photo.id, Math.max(0, Number(response?.likeCount || 0)));
+    } catch (error) {
+      const rollbackLikedPhotoIds = new Set(nextLikedPhotoIds);
+      if (liked) {
+        rollbackLikedPhotoIds.add(photo.id);
+      } else {
+        rollbackLikedPhotoIds.delete(photo.id);
+      }
+
+      setLikedPhotoIds(rollbackLikedPhotoIds);
+      saveLikedPhotoIds(rollbackLikedPhotoIds);
+      updatePhotoLikeCount(photo.id, Math.max(0, Number(photo.likeCount || 0)));
+      console.error(error);
+    }
+  }
+
   return (
     <div
       className={`mobile-public-shell ${
@@ -357,30 +431,6 @@ export default function MobileGalleryPage() {
             >
               <X size={18} />
             </button>
-            {hasMultiplePhotos ? (
-              <>
-                <button
-                  type="button"
-                  className="icon-button mobile-public-slideshow-nav mobile-public-slideshow-nav-left"
-                  onClick={() => {
-                    setActiveSlideIndex((current) => (current - 1 + displayPhotos.length) % displayPhotos.length);
-                  }}
-                  aria-label="이전 슬라이드"
-                >
-                  <ChevronLeft size={18} />
-                </button>
-                <button
-                  type="button"
-                  className="icon-button mobile-public-slideshow-nav mobile-public-slideshow-nav-right"
-                  onClick={() => {
-                    setActiveSlideIndex((current) => (current + 1) % displayPhotos.length);
-                  }}
-                  aria-label="다음 슬라이드"
-                >
-                  <ChevronRight size={18} />
-                </button>
-              </>
-            ) : null}
           </div>
           <div className="mobile-public-slideshow-controls">
             <div className="slideshow-speed-selector" role="radiogroup" aria-label="모바일 슬라이드쇼 속도">
@@ -429,7 +479,18 @@ export default function MobileGalleryPage() {
             </div>
 
             <div className="mobile-public-copy">
-              <h2>{getDisplayPhotoTitle(photo)}</h2>
+              <div className="mobile-public-card-heading">
+                <h2>{getDisplayPhotoTitle(photo)}</h2>
+                <button
+                  type="button"
+                  className={`icon-button like-button ${likedPhotoIds.has(photo.id) ? 'is-liked' : ''}`}
+                  onClick={(event) => togglePhotoLike(photo, event)}
+                  aria-label={likedPhotoIds.has(photo.id) ? '좋아요 취소' : '좋아요'}
+                >
+                  <Heart size={16} fill={likedPhotoIds.has(photo.id) ? 'currentColor' : 'none'} />
+                  <span>{Math.max(0, Number(photo.likeCount || 0))}</span>
+                </button>
+              </div>
               <div className="mobile-public-meta">
                 <span>
                   <CalendarDays size={14} />
@@ -501,6 +562,15 @@ export default function MobileGalleryPage() {
               <h2>{getDisplayPhotoTitle(selectedPhoto)}</h2>
               <p>{selectedPhoto.note || '등록된 메모가 없습니다.'}</p>
               <p>{selectedPhoto.locationText || '위치 정보 없음'}</p>
+              <button
+                type="button"
+                className={`icon-button like-button ${likedPhotoIds.has(selectedPhoto.id) ? 'is-liked' : ''}`}
+                onClick={(event) => togglePhotoLike(selectedPhoto, event)}
+                aria-label={likedPhotoIds.has(selectedPhoto.id) ? '좋아요 취소' : '좋아요'}
+              >
+                <Heart size={16} fill={likedPhotoIds.has(selectedPhoto.id) ? 'currentColor' : 'none'} />
+                <span>{Math.max(0, Number(selectedPhoto.likeCount || 0))}</span>
+              </button>
               <a
                 className="secondary-button topbar-action-button mobile-public-download"
                 href={getPhotoDownloadUrl(selectedPhoto)}

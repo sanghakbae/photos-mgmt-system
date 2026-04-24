@@ -634,9 +634,38 @@ function normalizePhotoMetadata(photo, requestOrigin = '') {
   return {
     ...photo,
     isPublic: photo.isPublic !== false,
+    likeCount: Math.max(0, Number(photo.likeCount || 0)),
     imageUrl,
     thumbUrl,
   };
+}
+
+async function handleTogglePhotoLike(response, photoId, direction) {
+  const photos = await readPhotos();
+  const index = photos.findIndex((photo) => photo.id === photoId);
+
+  if (index === -1) {
+    sendJson(response, 404, { error: 'Photo not found.' });
+    return;
+  }
+
+  const currentCount = Math.max(0, Number(photos[index].likeCount || 0));
+  const likeCount = direction === 'up'
+    ? currentCount + 1
+    : Math.max(0, currentCount - 1);
+
+  photos[index] = {
+    ...photos[index],
+    likeCount,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await writePhotos(photos);
+  sendJson(response, 200, {
+    ok: true,
+    photoId,
+    likeCount,
+  });
 }
 
 async function verifyAdmin(request) {
@@ -781,6 +810,7 @@ async function handleUploadPhoto(request, response) {
     updatedAt: now,
     createdBy: admin.email,
     sha256,
+    likeCount: 0,
     isPublic: true,
   };
 
@@ -810,6 +840,10 @@ async function handleUpdatePhoto(request, response, photoId) {
     capturedAt: body.capturedAt ?? photos[index].capturedAt,
     coordinatesText: body.coordinatesText ?? photos[index].coordinatesText,
     mapsUrl: body.mapsUrl ?? photos[index].mapsUrl,
+    likeCount:
+      typeof body.likeCount === 'number'
+        ? Math.max(0, Number(body.likeCount))
+        : photos[index].likeCount ?? 0,
     isPublic: typeof body.isPublic === 'boolean' ? body.isPublic : photos[index].isPublic !== false,
     updatedAt: new Date().toISOString(),
   };
@@ -1022,6 +1056,7 @@ async function handleMigrationPhoto(request, response) {
     updatedAt: meta.updatedAt || meta.createdAt || now,
     createdBy: meta.createdBy || 'migration',
     sha256: meta.sha256 || createHash('sha256').update(fileBuffer).digest('hex'),
+    likeCount: Math.max(0, Number(meta.likeCount || 0)),
     isPublic: meta.isPublic !== false,
   };
 
@@ -1222,6 +1257,18 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && pathname.startsWith('/api/public/photos/') && pathname.endsWith('/download')) {
       const photoId = pathname.split('/')[4];
       await handleDownloadPhoto(response, photoId);
+      return;
+    }
+
+    if (request.method === 'POST' && pathname.startsWith('/api/public/photos/') && pathname.endsWith('/like')) {
+      const photoId = pathname.split('/')[4];
+      await handleTogglePhotoLike(response, photoId, 'up');
+      return;
+    }
+
+    if (request.method === 'DELETE' && pathname.startsWith('/api/public/photos/') && pathname.endsWith('/like')) {
+      const photoId = pathname.split('/')[4];
+      await handleTogglePhotoLike(response, photoId, 'down');
       return;
     }
 

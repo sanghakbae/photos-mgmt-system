@@ -228,3 +228,15 @@ export function getPhotoDownloadUrl(photo) {
 
   return toApiUrl(`/api/public/photos/${photo.id}/download`);
 }
+
+export function addPublicPhotoLike(photoId) {
+  return request(`/api/public/photos/${photoId}/like`, {
+    method: 'POST',
+  });
+}
+
+export function removePublicPhotoLike(photoId) {
+  return request(`/api/public/photos/${photoId}/like`, {
+    method: 'DELETE',
+  });
+}

@@ -271,8 +271,27 @@ a {
   background: linear-gradient(180deg, transparent, rgba(9, 10, 14, 0.82));
 }
 
+.mobile-public-shell.is-slideshow-only .slideshow-speed-selector {
+  position: absolute;
+  left: 12px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  z-index: 4;
+}
+
 .mobile-public-shell.is-slideshow-only .slideshow-position {
-  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  z-index: 4;
+  transform: translateX(-50%);
+}
+
+.mobile-public-shell.is-slideshow-only .mobile-public-slideshow-controls > .topbar-action-button {
+  position: absolute;
+  right: 12px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  z-index: 4;
+  width: auto;
 }
 
 .mobile-public-card {
@@ -308,6 +327,13 @@ a {
 .mobile-public-copy {
   display: grid;
   gap: 6px;
+}
+
+.mobile-public-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .mobile-public-copy h2 {
@@ -408,6 +434,10 @@ a {
   color: var(--text-muted);
   font-size: 0.68rem;
   line-height: 1.45;
+}
+
+.mobile-public-modal-copy .like-button {
+  justify-self: start;
 }
 
 .mobile-public-download {
@@ -848,12 +878,40 @@ a {
   background: linear-gradient(180deg, transparent, rgba(6, 7, 10, 0.88));
 }
 
+.app-shell.is-slideshow-mode .slideshow-speed-selector {
+  position: absolute;
+  left: 20px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 33;
+}
+
+.app-shell.is-slideshow-mode .slideshow-position {
+  position: absolute;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 33;
+  transform: translateX(-50%);
+}
+
+.app-shell.is-slideshow-mode .hero-actions-inline {
+  position: absolute;
+  right: 20px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 33;
+  width: auto;
+}
+
 .slideshow-speed-selector,
 .slideshow-dots {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.slideshow-speed-selector {
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .slideshow-speed-button,
@@ -863,6 +921,7 @@ a {
 }
 
 .slideshow-speed-button {
+  flex: 0 0 auto;
   min-height: 28px;
   padding: 5px 10px;
   border-radius: 999px;
@@ -1096,6 +1155,32 @@ a {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(19, 22, 29, 0.9);
   color: var(--accent-deep);
+}
+
+.like-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 56px;
+  width: auto;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: rgba(255, 225, 221, 0.9);
+  background: rgba(19, 22, 29, 0.92);
+  flex-shrink: 0;
+}
+
+.like-button span {
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.like-button.is-liked {
+  color: #ff8c96;
+  border-color: rgba(255, 140, 150, 0.34);
+  background: rgba(73, 18, 28, 0.9);
 }
 
 .card-delete-button {
@@ -1985,8 +2070,18 @@ a {
   }
 
   .photo-modal-note-row {
-    align-items: flex-start;
-    flex-wrap: wrap;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .photo-modal-note-row p,
+  .photo-download-button {
+    grid-column: auto;
+  }
+
+  .photo-modal-note-row .like-button,
+  .photo-download-button {
+    justify-self: start;
   }
 
   .slideshow-nav-button-left,
