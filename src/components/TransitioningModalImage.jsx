@@ -64,7 +64,7 @@ export default function TransitioningModalImage({
   return (
     <ResilientImage
       {...imgProps}
-      sources={[displayedPhoto.thumbUrl, displayedPhoto.imageUrl]}
+      sources={[displayedPhoto.imageUrl, displayedPhoto.thumbUrl]}
       alt={alt}
       className={`${className} modal-image-transition${isTransitioning ? ' is-transitioning' : ''}`}
       decoding="async"

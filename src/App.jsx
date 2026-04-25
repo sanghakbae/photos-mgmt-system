@@ -9,6 +9,15 @@ function detectMobileClient() {
     return false;
   }
 
+  const params = new URLSearchParams(window.location.search);
+  const forcedMode = params.get('mobile');
+  if (forcedMode === '1') {
+    return true;
+  }
+  if (forcedMode === '0') {
+    return false;
+  }
+
   const userAgent = navigator.userAgent || '';
   const agentMobile = /Android|iPhone|iPad|iPod|Mobile|CriOS|FxiOS|SamsungBrowser/i.test(userAgent);
   const coarsePointer =

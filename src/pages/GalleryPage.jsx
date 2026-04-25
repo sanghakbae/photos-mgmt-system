@@ -790,15 +790,6 @@ export default function GalleryPage() {
                 <h2>{getDisplayPhotoTitle(selectedPhoto)}</h2>
                 <div className="photo-modal-note-row">
                   <p>{selectedPhoto.note || '등록된 메모가 없습니다.'}</p>
-                  <button
-                    type="button"
-                    className={`icon-button like-button ${likedPhotoIds.has(selectedPhoto.id) ? 'is-liked' : ''}`}
-                    onClick={(event) => togglePhotoLike(selectedPhoto, event)}
-                    aria-label={likedPhotoIds.has(selectedPhoto.id) ? '좋아요 취소' : '좋아요'}
-                  >
-                    <Heart size={16} fill={likedPhotoIds.has(selectedPhoto.id) ? 'currentColor' : 'none'} />
-                    <span>{Math.max(0, Number(selectedPhoto.likeCount || 0))}</span>
-                  </button>
                   {!selectedPhoto.isPlaceholder ? (
                     <a
                       className="secondary-button topbar-action-button photo-download-button"
@@ -809,6 +800,15 @@ export default function GalleryPage() {
                       사진 다운로드
                     </a>
                   ) : null}
+                  <button
+                    type="button"
+                    className={`icon-button like-button ${likedPhotoIds.has(selectedPhoto.id) ? 'is-liked' : ''}`}
+                    onClick={(event) => togglePhotoLike(selectedPhoto, event)}
+                    aria-label={likedPhotoIds.has(selectedPhoto.id) ? '좋아요 취소' : '좋아요'}
+                  >
+                    <Heart size={16} fill={likedPhotoIds.has(selectedPhoto.id) ? 'currentColor' : 'none'} />
+                    <span>{Math.max(0, Number(selectedPhoto.likeCount || 0))}</span>
+                  </button>
                 </div>
                 <p>{selectedPhoto.locationText || '위치 정보 없음'}</p>
               </div>

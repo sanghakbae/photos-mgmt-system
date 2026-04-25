@@ -33,6 +33,7 @@ body {
   min-height: 100vh;
   color: var(--text-main);
   font-size: 12px;
+  overflow-x: hidden;
 }
 
 button,
@@ -57,11 +58,15 @@ a {
 
 #root {
   min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .mobile-public-shell {
   min-height: 100vh;
+  width: 100%;
   padding: 10px 10px 24px;
+  overflow-x: hidden;
 }
 
 .mobile-public-header,
@@ -76,9 +81,11 @@ a {
 }
 
 .mobile-public-header {
+  position: relative;
   display: grid;
   gap: 8px;
   padding: 12px;
+  padding-right: 132px;
   border-radius: 14px;
 }
 
@@ -95,7 +102,9 @@ a {
 }
 
 .mobile-public-status {
-  justify-self: start;
+  position: absolute;
+  top: 12px;
+  right: 12px;
 }
 
 .mobile-public-toolbar {
@@ -262,36 +271,85 @@ a {
 
 .mobile-public-shell.is-slideshow-only .mobile-public-slideshow-controls {
   position: absolute;
-  left: 50%;
+  left: 0;
+  right: 0;
   bottom: 0;
   z-index: 3;
-  transform: translateX(-50%);
-  justify-content: center;
+  display: grid;
+  grid-template-columns: minmax(0, auto) 1fr minmax(0, auto);
+  align-items: center;
+  gap: 10px;
   padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
   background: linear-gradient(180deg, transparent, rgba(9, 10, 14, 0.82));
+  box-sizing: border-box;
 }
 
 .mobile-public-shell.is-slideshow-only .slideshow-speed-selector {
-  position: absolute;
-  left: 12px;
-  bottom: calc(10px + env(safe-area-inset-bottom));
+  position: relative;
+  left: auto;
+  bottom: auto;
   z-index: 4;
+  justify-self: start;
+  min-width: 0;
 }
 
 .mobile-public-shell.is-slideshow-only .slideshow-position {
-  position: absolute;
-  left: 50%;
-  bottom: calc(10px + env(safe-area-inset-bottom));
+  position: relative;
+  left: auto;
+  bottom: auto;
   z-index: 4;
-  transform: translateX(-50%);
+  justify-self: center;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .mobile-public-shell.is-slideshow-only .mobile-public-slideshow-controls > .topbar-action-button {
-  position: absolute;
-  right: 12px;
-  bottom: calc(10px + env(safe-area-inset-bottom));
+  position: relative;
+  right: auto;
+  bottom: auto;
   z-index: 4;
   width: auto;
+  justify-self: end;
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .mobile-public-shell.is-slideshow-only .mobile-public-slideshow-controls {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 6px;
+    padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-public-shell.is-slideshow-only .slideshow-speed-selector {
+    gap: 3px;
+  }
+
+  .mobile-public-shell.is-slideshow-only .slideshow-speed-button {
+    min-height: 22px;
+    padding: 2px 6px;
+    font-size: 0.68rem;
+  }
+
+  .mobile-public-shell.is-slideshow-only .slideshow-speed-selector {
+    gap: 4px;
+  }
+
+  .mobile-public-shell.is-slideshow-only .slideshow-speed-button {
+    min-height: 24px;
+    padding: 4px 7px;
+    font-size: 0.68rem;
+  }
+
+  .mobile-public-shell.is-slideshow-only .slideshow-position {
+    font-size: 0.72rem;
+  }
+
+  .mobile-public-shell.is-slideshow-only .mobile-public-slideshow-controls > .topbar-action-button {
+    min-height: 26px;
+    padding: 3px 7px;
+    font-size: 0.68rem;
+  }
 }
 
 .mobile-public-card {
@@ -373,32 +431,64 @@ a {
   position: relative;
   display: grid;
   grid-template-rows: auto auto;
+  justify-items: stretch;
   gap: 10px;
-  width: min(92vw, 560px);
-  max-height: min(90dvh, 840px);
-  padding: 12px;
+  width: min(calc(100vw - 24px), 760px);
+  max-height: min(94dvh, 920px);
+  padding: 0;
+  margin: 0 auto;
+  justify-self: center;
   border-radius: 18px;
-  overflow: auto;
+  overflow: hidden;
+  background: rgba(15, 18, 24, 0.94);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.34),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
   animation: modal-content-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.mobile-public-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 2;
+  touch-action: manipulation;
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
 }
 
 .mobile-public-modal-image-wrap {
   position: relative;
-  padding-top: 22px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding-top: 0;
+  width: 100%;
+  max-width: 100%;
+  justify-self: center;
+  margin: 0;
+  border-radius: 18px;
+  overflow: hidden;
+  touch-action: manipulation;
+  isolation: isolate;
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  clip-path: inset(0 round 18px);
 }
 
 .mobile-public-modal-image {
+  display: block;
   width: 100%;
-  max-height: min(58dvh, 520px);
+  max-height: min(74dvh, 760px);
+  height: auto;
+  max-width: 100%;
+  margin-inline: auto;
   object-fit: contain;
-  border-radius: 12px;
+  object-position: center center;
+  border-radius: 14px;
+  overflow: hidden;
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  clip-path: inset(0 round 14px);
+}
+
+.mobile-public-modal-image-wrap img,
+.mobile-public-modal-image-wrap .mobile-public-modal-image,
+.mobile-public-modal-image-wrap .modal-image-transition {
+  border-radius: 18px;
+  overflow: hidden;
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+  clip-path: inset(0 round 18px);
 }
 
 .mobile-public-modal-nav {
@@ -419,6 +509,19 @@ a {
 .mobile-public-modal-copy {
   display: grid;
   gap: 6px;
+  padding: 8px 12px 12px;
+  overflow: auto;
+}
+
+.mobile-public-modal-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.mobile-public-modal-heading h2 {
+  justify-self: start;
 }
 
 .mobile-public-modal-copy h2,
@@ -437,12 +540,23 @@ a {
 }
 
 .mobile-public-modal-copy .like-button {
-  justify-self: start;
+  justify-self: end;
+  min-height: 28px;
+  padding: 3px 7px;
+  gap: 4px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+}
+
+.mobile-public-modal-copy .like-button svg {
+  width: 14px;
+  height: 14px;
 }
 
 .mobile-public-download {
-  justify-self: start;
-  margin-top: 4px;
+  justify-self: center;
+  margin-top: 0;
+  touch-action: manipulation;
 }
 
 @keyframes modal-backdrop-in {
@@ -905,7 +1019,7 @@ a {
 .slideshow-dots {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
 }
 
@@ -922,9 +1036,9 @@ a {
 
 .slideshow-speed-button {
   flex: 0 0 auto;
-  min-height: 28px;
-  padding: 5px 10px;
-  border-radius: 999px;
+  min-height: 24px;
+  padding: 3px 7px;
+  border-radius: 12px;
   color: var(--text-muted);
 }
 
@@ -1361,7 +1475,7 @@ a {
 
 .photo-modal-note-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   width: 100%;
   gap: 12px;
@@ -1422,6 +1536,11 @@ a {
   min-width: 132px;
   background: rgba(18, 22, 28, 0.74);
   backdrop-filter: blur(14px);
+}
+
+.photo-modal-note-row .like-button {
+  grid-column: 3;
+  justify-self: end;
 }
 
 .admin-shell {
@@ -2147,6 +2266,10 @@ a {
     justify-self: start;
   }
 
+  .photo-modal-note-row .like-button {
+    justify-self: end;
+  }
+
   .slideshow-nav-button-left,
   .photo-nav-button-left {
     left: 2px;
@@ -2209,10 +2332,6 @@ a {
     max-height: 68vh;
   }
 
-  .admin-grid {
-    grid-template-columns: 1fr;
-  }
-
   .admin-login-card {
     margin-top: 24px;
     padding: 18px 16px;
@@ -2226,10 +2345,13 @@ a {
   }
 
   .admin-login-actions > *,
-  .admin-topbar-actions > *,
   .admin-sync-actions > *,
   .admin-photo-buttons > * {
     width: 100%;
+  }
+
+  .admin-topbar-actions > * {
+    width: auto;
   }
 
   .admin-photo-preview {

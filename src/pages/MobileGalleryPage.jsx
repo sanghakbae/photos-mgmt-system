@@ -8,7 +8,6 @@ import {
   MapPin,
   MessageSquareText,
   Search,
-  X,
 } from 'lucide-react';
 import ResilientImage from '../components/ResilientImage';
 import TransitioningModalImage from '../components/TransitioningModalImage';
@@ -62,6 +61,9 @@ export default function MobileGalleryPage() {
   const [likedPhotoIds, setLikedPhotoIds] = useState(() => loadLikedPhotoIds());
   const slideshowTouchStartRef = useRef(null);
   const progressiveLoadGenerationRef = useRef(0);
+  const photoCardRefs = useRef(new Map());
+  const pendingRestorePhotoIdRef = useRef(null);
+  const lastModalCloseAtRef = useRef(0);
 
   async function loadPublicGallery() {
     const generation = progressiveLoadGenerationRef.current + 1;
@@ -260,6 +262,30 @@ export default function MobileGalleryPage() {
     return () => window.clearInterval(intervalId);
   }, [displayPhotos.length, slideshowSpeed, slideshowVisible]);
 
+  useEffect(() => {
+    if (selectedPhoto || !pendingRestorePhotoIdRef.current) {
+      return;
+    }
+
+    const restorePhotoId = pendingRestorePhotoIdRef.current;
+    pendingRestorePhotoIdRef.current = null;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const target = photoCardRefs.current.get(restorePhotoId);
+      if (!target) {
+        return;
+      }
+
+      target.scrollIntoView({
+        block: 'center',
+        inline: 'nearest',
+        behavior: 'smooth',
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [selectedPhoto, displayPhotos]);
+
   const statusPresentation = getSystemStatusPresentation(systemStatus);
   const statusClassName = `${statusPresentation.className} mobile-public-status`;
 
@@ -356,6 +382,26 @@ export default function MobileGalleryPage() {
     event?.preventDefault?.();
     event?.stopPropagation?.();
     setSlideshowSpeed(speed);
+  }
+
+  function openSelectedPhoto(photo) {
+    if (Date.now() - lastModalCloseAtRef.current < 400) {
+      return;
+    }
+    pendingRestorePhotoIdRef.current = null;
+    setSelectedPhoto(photo);
+  }
+
+  function closeSelectedPhoto(event, photoId = selectedPhoto?.id) {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    if (photoId) {
+      pendingRestorePhotoIdRef.current = photoId;
+    }
+
+    lastModalCloseAtRef.current = Date.now();
+    setSelectedPhoto(null);
   }
 
   return (
@@ -493,7 +539,14 @@ export default function MobileGalleryPage() {
             key={photo.id}
             type="button"
             className="mobile-public-card"
-            onClick={() => setSelectedPhoto(photo)}
+            ref={(node) => {
+              if (node) {
+                photoCardRefs.current.set(photo.id, node);
+              } else {
+                photoCardRefs.current.delete(photo.id);
+              }
+            }}
+            onClick={() => openSelectedPhoto(photo)}
           >
             <div className="mobile-public-photo-frame">
               <ResilientImage
@@ -550,62 +603,55 @@ export default function MobileGalleryPage() {
       {selectedPhoto ? (
         <div
           className="mobile-public-modal-backdrop"
-          onPointerDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setSelectedPhoto(null);
-            }
-          }}
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              setSelectedPhoto(null);
-            }
-          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
           role="presentation"
         >
           <section
             className="mobile-public-modal"
             aria-label={`${getDisplayPhotoTitle(selectedPhoto)} 사진 크게 보기`}
-            onClick={() => setSelectedPhoto(null)}
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
           >
-            <button
-              type="button"
-              className="icon-button mobile-public-close"
-              onClick={() => setSelectedPhoto(null)}
-              aria-label="사진 닫기"
+            <div
+              className="mobile-public-modal-image-wrap"
+              onPointerUp={(event) => closeSelectedPhoto(event, selectedPhoto.id)}
+              onClick={(event) => closeSelectedPhoto(event, selectedPhoto.id)}
             >
-              <X size={18} />
-            </button>
-
-            <div className="mobile-public-modal-image-wrap">
               <TransitioningModalImage
                 photo={selectedPhoto}
                 className="mobile-public-modal-image"
                 alt={getDisplayPhotoTitle(selectedPhoto)}
-                onClick={() => setSelectedPhoto(null)}
               />
             </div>
 
             <div className="mobile-public-modal-copy">
-              <h2>{getDisplayPhotoTitle(selectedPhoto)}</h2>
-              <p>{selectedPhoto.note || '등록된 메모가 없습니다.'}</p>
-              <p>{selectedPhoto.locationText || '위치 정보 없음'}</p>
-              <button
-                type="button"
-                className={`icon-button like-button ${likedPhotoIds.has(selectedPhoto.id) ? 'is-liked' : ''}`}
-                onClick={(event) => togglePhotoLike(selectedPhoto, event)}
-                aria-label={likedPhotoIds.has(selectedPhoto.id) ? '좋아요 취소' : '좋아요'}
-              >
-                <Heart size={16} fill={likedPhotoIds.has(selectedPhoto.id) ? 'currentColor' : 'none'} />
-                <span>{Math.max(0, Number(selectedPhoto.likeCount || 0))}</span>
-              </button>
-              <a
-                className="secondary-button topbar-action-button mobile-public-download"
-                href={getPhotoDownloadUrl(selectedPhoto)}
-                download
-              >
-                <Download size={16} />
-                사진 다운로드
-              </a>
+              <div className="mobile-public-modal-heading">
+                <h2>{getDisplayPhotoTitle(selectedPhoto)}</h2>
+                <a
+                  className="secondary-button topbar-action-button mobile-public-download"
+                  href={getPhotoDownloadUrl(selectedPhoto)}
+                  download
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onPointerUp={(event) => event.stopPropagation()}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <Download size={16} />
+                  사진 다운로드
+                </a>
+                <button
+                  type="button"
+                  className={`icon-button like-button ${likedPhotoIds.has(selectedPhoto.id) ? 'is-liked' : ''}`}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onPointerUp={(event) => event.stopPropagation()}
+                  onClick={(event) => togglePhotoLike(selectedPhoto, event)}
+                  aria-label={likedPhotoIds.has(selectedPhoto.id) ? '좋아요 취소' : '좋아요'}
+                >
+                  <Heart size={16} fill={likedPhotoIds.has(selectedPhoto.id) ? 'currentColor' : 'none'} />
+                  <span>{Math.max(0, Number(selectedPhoto.likeCount || 0))}</span>
+                </button>
+              </div>
             </div>
           </section>
         </div>
