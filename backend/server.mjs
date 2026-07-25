@@ -429,15 +429,6 @@ function sanitizeFileName(fileName) {
   return (fileName || 'photo.jpg').replace(/[^a-zA-Z0-9._-]/g, '-');
 }
 
-function escapeXml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
-}
-
 function getDownloadFormat(mimeType, fileName) {
   const normalizedMimeType = String(mimeType || '').toLowerCase();
   const extension = path.extname(fileName || '').toLowerCase();

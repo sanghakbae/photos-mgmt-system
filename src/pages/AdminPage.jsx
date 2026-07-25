@@ -363,7 +363,7 @@ function formatStorageSize(totalBytes) {
   return `${size.toFixed(size >= 100 ? 0 : size >= 10 ? 1 : 2)} ${units[unitIndex]}`;
 }
 
-function AdminLogin({ error, loading, onLogin, buttonContainerRef }) {
+function AdminLogin({ error, buttonContainerRef }) {
   return (
     <div className="admin-login-card">
       <p className="eyebrow">Admin</p>
@@ -396,7 +396,6 @@ export default function AdminPage() {
     backend: '',
   });
   const [loading, setLoading] = useState(true);
-  const [authLoading, setAuthLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [preparingUpload, setPreparingUpload] = useState(false);
   const [scanningSimilar, setScanningSimilar] = useState(false);
@@ -532,7 +531,6 @@ export default function AdminPage() {
       return;
     }
 
-    setAuthLoading(true);
     setError('');
 
     try {
@@ -583,7 +581,6 @@ export default function AdminPage() {
       console.error(scriptError);
       setError('Google 로그인 버튼을 불러오지 못했습니다.');
     } finally {
-      setAuthLoading(false);
     }
   }
 
@@ -662,7 +659,7 @@ export default function AdminPage() {
       let uploadedCount = 0;
       let duplicateCount = 0;
       let failedCount = 0;
-      const uploadedPhotos = await mapWithConcurrency(preparedFiles, effectiveUploadConcurrency, async (item) => {
+      await mapWithConcurrency(preparedFiles, effectiveUploadConcurrency, async (item) => {
         if (item.isDuplicate) {
           completedUploadCount += 1;
           duplicateCount += 1;
@@ -1248,8 +1245,6 @@ export default function AdminPage() {
       {!session ? (
         <AdminLogin
           error={error}
-          loading={authLoading}
-          onLogin={renderGoogleButton}
           buttonContainerRef={googleButtonRef}
         />
       ) : (

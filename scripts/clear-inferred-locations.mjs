@@ -17,7 +17,7 @@ async function main() {
   const updated = photos.map((p) => {
     if (!p.locationInferred) return p;
     cleared += 1;
-    const { locationInferred, ...rest } = p;
+    const { locationInferred: _locationInferred, ...rest } = p;
     return { ...rest, locationText: '', coordinatesText: '', mapsUrl: '', updatedAt: now };
   });
   const located = updated.filter((p) => String(p.locationText || '').trim()).length;

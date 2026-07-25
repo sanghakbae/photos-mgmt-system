@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -69,7 +69,11 @@ async function main() {
     process.stdout.write(`Downloaded ${index + 1}/${photos.length}: ${photo.fileName}\n`);
   }
 
-  const normalizedPhotos = photos.map(({ thumbUrl, ...photo }) => photo);
+  const normalizedPhotos = photos.map((photo) => {
+    const normalized = { ...photo };
+    delete normalized.thumbUrl;
+    return normalized;
+  });
   await writeFile(photosPath, `${JSON.stringify(normalizedPhotos, null, 2)}\n`, 'utf8');
   process.stdout.write(`Saved ${photos.length} photos to ${photosPath}\n`);
 }

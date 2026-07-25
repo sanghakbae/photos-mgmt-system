@@ -46,8 +46,6 @@ const bucket = process.env.R2_BUCKET_NAME;
 async function main() {
   const res = await r2.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   const photos = JSON.parse(Buffer.from(await res.Body.transformToByteArray()).toString('utf8'));
-  const byId = new Map(photos.map((p) => [p.id, p]));
-
   const dated = photos
     .filter((p) => String(p.capturedAt || '').trim())
     .sort((a, b) => String(a.capturedAt).localeCompare(String(b.capturedAt))
@@ -61,10 +59,10 @@ async function main() {
     if (anchor[i]) continue;
     if (String(dated[i].locationText || '').trim()) continue; // keep any existing (e.g. URL) text
     // nearest anchor by index distance
-    let best = null; let bestDist = Infinity;
+    let best = null;
     for (let d = 1; d <= MAXGAP; d += 1) {
-      if (i - d >= 0 && anchor[i - d]) { best = anchor[i - d]; bestDist = d; break; }
-      if (i + d < dated.length && anchor[i + d]) { best = anchor[i + d]; bestDist = d; break; }
+      if (i - d >= 0 && anchor[i - d]) { best = anchor[i - d]; break; }
+      if (i + d < dated.length && anchor[i + d]) { best = anchor[i + d]; break; }
     }
     if (best) assign[dated[i].id] = best;
   }
