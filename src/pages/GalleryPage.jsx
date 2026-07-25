@@ -274,6 +274,7 @@ export default function GalleryPage() {
         setLoadingMore(false);
       }
     }
+    setActiveSlideIndex(0);
     setSlideshowVisible(true);
   }
 
@@ -546,7 +547,10 @@ export default function GalleryPage() {
   }, [slideshowPhotos]);
 
   useEffect(() => {
-    if (!hasMultipleSlides) {
+    // Only advance while the slideshow is actually open. Without this the timer
+    // kept running behind the gallery, so opening the slideshow started at an
+    // arbitrary photo and the whole grid re-rendered every few seconds.
+    if (!hasMultipleSlides || !slideshowVisible) {
       return undefined;
     }
 
@@ -555,7 +559,7 @@ export default function GalleryPage() {
     }, slideshowSpeed);
 
     return () => window.clearInterval(intervalId);
-  }, [hasMultipleSlides, slideshowPhotos.length, slideshowSpeed]);
+  }, [hasMultipleSlides, slideshowPhotos.length, slideshowSpeed, slideshowVisible]);
 
   return (
     <div className={`app-shell ${slideshowVisible ? 'is-slideshow-mode' : ''}`}>
@@ -864,6 +868,7 @@ export default function GalleryPage() {
                       className="secondary-button topbar-action-button photo-download-button"
                       href={getPhotoDownloadUrl(selectedPhoto)}
                       download
+                      onClick={(event) => event.stopPropagation()}
                     >
                       <Download size={16} />
                       사진 다운로드
@@ -885,6 +890,7 @@ export default function GalleryPage() {
                     href={selectedPhoto.mapsUrl}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={(event) => event.stopPropagation()}
                   >
                     <MapPin size={15} />
                     <span>{selectedPhoto.locationText || '지도에서 보기'}</span>

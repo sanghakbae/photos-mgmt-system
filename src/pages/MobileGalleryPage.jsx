@@ -443,8 +443,13 @@ export default function MobileGalleryPage() {
     setSlideshowSpeed(speed);
   }
 
+  // Short guard only to swallow the trailing synthetic click a touch device may
+  // fire right after the close tap. 400ms was long enough to reject the user's
+  // real next tap, making photos seem not to open.
+  const REOPEN_GUARD_MS = 120;
+
   function openSelectedPhoto(photo) {
-    if (Date.now() - lastModalCloseAtRef.current < 400) {
+    if (Date.now() - lastModalCloseAtRef.current < REOPEN_GUARD_MS) {
       return;
     }
     pendingRestorePhotoIdRef.current = null;
@@ -700,19 +705,27 @@ export default function MobileGalleryPage() {
         <div
           className="mobile-public-modal-backdrop"
           onPointerDown={(event) => event.stopPropagation()}
-          onClick={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            // Tapping outside the modal content closes it.
+            if (event.target === event.currentTarget) {
+              closeSelectedPhoto(event, selectedPhoto.id);
+            }
+          }}
           role="presentation"
         >
           <section
             className="mobile-public-modal"
             aria-label={`${getDisplayPhotoTitle(selectedPhoto)} 사진 크게 보기`}
             onPointerDown={(event) => event.stopPropagation()}
-            onPointerUp={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              // Empty space inside the modal (outside the photo/controls) closes too.
+              if (event.target === event.currentTarget) {
+                closeSelectedPhoto(event, selectedPhoto.id);
+              }
+            }}
           >
             <div
               className="mobile-public-modal-image-wrap"
-              onPointerUp={(event) => closeSelectedPhoto(event, selectedPhoto.id)}
               onClick={(event) => closeSelectedPhoto(event, selectedPhoto.id)}
             >
               <TransitioningModalImage
