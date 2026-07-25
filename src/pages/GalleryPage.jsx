@@ -31,7 +31,9 @@ import { useBodyScrollLock } from '../lib/useBodyScrollLock';
 
 const STATUS_REFRESH_MS = 300000;
 const INITIAL_PHOTO_BATCH_SIZE = 36;
-const FOLLOW_UP_BATCH_SIZE = 72;
+// Larger follow-up pages mean far fewer sequential requests (and re-renders)
+// before the whole gallery is available.
+const FOLLOW_UP_BATCH_SIZE = 240;
 const SLIDESHOW_SPEED_OPTIONS = [
   { label: '2초', value: 2000 },
   { label: '5초', value: 5000 },
@@ -260,22 +262,28 @@ export default function GalleryPage() {
   const slideshowPhotos = photos;
 
   async function openSlideshow() {
-    if (hasMorePhotos) {
-      setLoadingMore(true);
-      try {
-        const allPhotos = await getPublicPhotos();
-        setPhotos(allPhotos);
-        setTotalPhotoCount(allPhotos.length);
-        nextPhotoOffsetRef.current = allPhotos.length;
-        setHasMorePhotos(false);
-      } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : '슬라이드 사진을 불러오지 못했습니다.');
-      } finally {
-        setLoadingMore(false);
-      }
-    }
+    // Show the slideshow right away with the photos already loaded, then pull in
+    // the rest in the background. Awaiting the full list first made the button
+    // feel unresponsive for about a second.
     setActiveSlideIndex(0);
     setSlideshowVisible(true);
+
+    if (!hasMorePhotos) {
+      return;
+    }
+
+    setLoadingMore(true);
+    try {
+      const allPhotos = await getPublicPhotos();
+      setPhotos(allPhotos);
+      setTotalPhotoCount(allPhotos.length);
+      nextPhotoOffsetRef.current = allPhotos.length;
+      setHasMorePhotos(false);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : '슬라이드 사진을 불러오지 못했습니다.');
+    } finally {
+      setLoadingMore(false);
+    }
   }
 
   const activeSlide = slideshowPhotos[activeSlideIndex] ?? slideshowPhotos[0] ?? null;
@@ -738,8 +746,9 @@ export default function GalleryPage() {
       {!slideshowVisible && error ? <p className="error-banner">{error}</p> : null}
       {!slideshowVisible && loading && !photos.length ? <p className="admin-loading">사진 목록을 불러오는 중입니다.</p> : null}
 
-      {!slideshowVisible ? (
-        <main className={isMobileExperience ? 'gallery-grid mobile-gallery-grid' : 'gallery-grid'}>
+      {/* Kept mounted during the slideshow (hidden via .is-slideshow-mode CSS):
+          unmounting ~1000 cards made opening/closing the slideshow sluggish. */}
+      <main className={isMobileExperience ? 'gallery-grid mobile-gallery-grid' : 'gallery-grid'}>
         {displayPhotos.map((photo, index) => (
           <article
             className="photo-card"
@@ -834,8 +843,7 @@ export default function GalleryPage() {
             </div>
           </article>
         ) : null}
-        </main>
-      ) : null}
+      </main>
 
       {selectedPhoto ? (
         <div

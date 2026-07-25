@@ -31,7 +31,9 @@ import { useBodyScrollLock } from '../lib/useBodyScrollLock';
 
 const STATUS_REFRESH_MS = 300000;
 const INITIAL_PHOTO_BATCH_SIZE = 30;
-const FOLLOW_UP_BATCH_SIZE = 60;
+// Larger follow-up pages mean far fewer sequential requests (and re-renders)
+// before the whole gallery is available.
+const FOLLOW_UP_BATCH_SIZE = 240;
 const SLIDESHOW_SPEED_OPTIONS = [
   { label: '2초', value: 2000 },
   { label: '5초', value: 5000 },
@@ -595,8 +597,9 @@ export default function MobileGalleryPage() {
         </section>
       ) : null}
 
-      {!slideshowVisible || !activeSlide ? (
-        <main className="mobile-public-feed">
+      {/* Kept mounted while the slideshow runs — `.is-slideshow-only` already
+          hides it in CSS, and unmounting ~1000 cards delayed opening by ~1.8s. */}
+      <main className="mobile-public-feed">
         {displayPhotos.map((photo, index) => (
           <div
             key={photo.id}
@@ -698,8 +701,7 @@ export default function MobileGalleryPage() {
             </div>
           </div>
         ) : null}
-        </main>
-      ) : null}
+      </main>
 
       {selectedPhoto ? (
         <div

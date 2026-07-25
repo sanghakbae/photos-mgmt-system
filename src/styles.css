@@ -362,6 +362,9 @@ a {
   color: inherit;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
+  /* Off-screen cards skip rendering work (hundreds of photos in the feed). */
+  content-visibility: auto;
+  contain-intrinsic-size: 360px;
 }
 
 .mobile-public-card-empty {
@@ -844,6 +847,10 @@ a {
   padding: 0;
 }
 
+.app-shell.is-slideshow-mode .gallery-grid {
+  display: none;
+}
+
 .app-shell.is-slideshow-mode .background-orb {
   display: none;
 }
@@ -1155,6 +1162,10 @@ a {
   overflow: hidden;
   border-radius: 8px;
   animation: card-enter 600ms ease both;
+  /* Skip layout/paint for cards scrolled out of view — with ~1000 photos this
+     is what keeps the grid responsive. */
+  content-visibility: auto;
+  contain-intrinsic-size: 320px;
 }
 
 .photo-open-button {

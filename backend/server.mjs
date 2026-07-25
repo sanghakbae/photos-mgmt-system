@@ -973,7 +973,9 @@ function clampPublicPhotoLimit(value) {
     return 60;
   }
 
-  return Math.min(Math.max(parsed, 1), 120);
+  // Allow larger pages so clients need far fewer sequential round trips to
+  // fill the gallery (metadata is served from the in-memory cache).
+  return Math.min(Math.max(parsed, 1), 300);
 }
 
 function clampPublicPhotoOffset(value) {
