@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
 import GalleryPage from './pages/GalleryPage';
 import AdminPage from './pages/AdminPage';
 import MobileGalleryPage from './pages/MobileGalleryPage';
@@ -30,6 +29,7 @@ function detectMobileClient() {
 
 function App() {
   const [isMobileClient, setIsMobileClient] = useState(() => detectMobileClient());
+  const [route, setRoute] = useState(() => window.location.hash.replace(/^#/, '') || '/');
 
   useEffect(() => {
     function syncClientType() {
@@ -39,20 +39,19 @@ function App() {
     syncClientType();
     window.addEventListener('resize', syncClientType);
     window.addEventListener('orientationchange', syncClientType);
+    const syncRoute = () => setRoute(window.location.hash.replace(/^#/, '') || '/');
+    window.addEventListener('hashchange', syncRoute);
 
     return () => {
       window.removeEventListener('resize', syncClientType);
       window.removeEventListener('orientationchange', syncClientType);
+      window.removeEventListener('hashchange', syncRoute);
     };
   }, []);
 
-  return (
-    <Routes>
-      <Route path="/" element={isMobileClient ? <MobileGalleryPage /> : <GalleryPage />} />
-      <Route path="/admin" element={<AdminPage />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
-  );
+  return route === '/admin'
+    ? <AdminPage />
+    : isMobileClient ? <MobileGalleryPage /> : <GalleryPage />;
 }
 
 export default App;

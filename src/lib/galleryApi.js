@@ -138,10 +138,11 @@ function getAdminToken() {
   return loadAdminSession()?.credential ?? '';
 }
 
-export function getPublicPhotosPage({ offset = 0, limit = 60 } = {}) {
+export function getPublicPhotosPage({ offset = 0, limit = 60, search = '' } = {}) {
   const params = new URLSearchParams({
     offset: String(offset),
     limit: String(limit),
+    ...(search.trim() ? { search: search.trim() } : {}),
   });
 
   return request(`/api/public/photos?${params.toString()}`).then((data) => ({
@@ -155,7 +156,7 @@ export function getPublicPhotosPage({ offset = 0, limit = 60 } = {}) {
 }
 
 export function getPublicPhotos() {
-  return getPublicPhotosPage().then((data) => data.photos);
+  return request('/api/public/photos').then((data) => (data?.photos ?? []).map(withAssetUrl));
 }
 
 export function getPublicSystemStatus() {

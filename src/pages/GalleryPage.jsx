@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   CalendarDays,
   Download,
@@ -15,6 +14,7 @@ import TransitioningModalImage from '../components/TransitioningModalImage';
 import {
   addPublicPhotoLike,
   getPhotoDownloadUrl,
+  getPublicPhotos,
   getPublicPhotosPage,
   getPublicSystemStatus,
   removePublicPhotoLike,
@@ -74,6 +74,8 @@ export default function GalleryPage() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMorePhotos, setHasMorePhotos] = useState(false);
+  const [loadMoreFailed, setLoadMoreFailed] = useState(false);
   const [totalPhotoCount, setTotalPhotoCount] = useState(0);
   const [error, setError] = useState('');
   const [selectedPhotoId, setSelectedPhotoId] = useState(null);
@@ -87,6 +89,8 @@ export default function GalleryPage() {
   const imagePreloadCacheRef = useRef(new Set());
   const slideshowTouchStartRef = useRef(null);
   const progressiveLoadGenerationRef = useRef(0);
+  const nextPhotoOffsetRef = useRef(0);
+  const loadMoreSentinelRef = useRef(null);
 
   function preloadImage(src) {
     if (!src || imagePreloadCacheRef.current.has(src)) {
@@ -99,7 +103,7 @@ export default function GalleryPage() {
     image.src = src;
   }
 
-  async function loadPublicPhotos() {
+  async function loadPublicPhotos(searchQuery = '') {
     const generation = progressiveLoadGenerationRef.current + 1;
     progressiveLoadGenerationRef.current = generation;
     setLoading(true);
@@ -108,6 +112,7 @@ export default function GalleryPage() {
       const firstPage = await getPublicPhotosPage({
         offset: 0,
         limit: INITIAL_PHOTO_BATCH_SIZE,
+        search: searchQuery,
       });
 
       if (progressiveLoadGenerationRef.current !== generation) {
@@ -116,40 +121,51 @@ export default function GalleryPage() {
 
       setPhotos(firstPage.photos);
       setTotalPhotoCount(firstPage.totalCount);
+      nextPhotoOffsetRef.current = firstPage.offset + firstPage.photos.length;
+      setHasMorePhotos(firstPage.hasMore);
+      setLoadMoreFailed(false);
       setError('');
       setLoading(false);
-
-      if (!firstPage.hasMore) {
-        return;
-      }
-
-      let offset = firstPage.offset + firstPage.photos.length;
-      setLoadingMore(true);
-
-      while (offset < firstPage.totalCount && progressiveLoadGenerationRef.current === generation) {
-        const nextPage = await getPublicPhotosPage({
-          offset,
-          limit: FOLLOW_UP_BATCH_SIZE,
-        });
-
-        if (progressiveLoadGenerationRef.current !== generation) {
-          return;
-        }
-
-        setPhotos((current) => [...current, ...nextPage.photos]);
-        setTotalPhotoCount(nextPage.totalCount);
-        offset += nextPage.photos.length;
-
-        if (!nextPage.hasMore || nextPage.photos.length === 0) {
-          break;
-        }
-      }
     } catch (loadError) {
       console.error(loadError);
       setError(loadError instanceof Error ? loadError.message : '공개 사진을 불러오지 못했습니다.');
     } finally {
       if (progressiveLoadGenerationRef.current === generation) {
         setLoading(false);
+        setLoadingMore(false);
+      }
+    }
+  }
+
+  async function loadMorePhotos() {
+    if (loading || loadingMore || loadMoreFailed || !hasMorePhotos) {
+      return;
+    }
+
+    const generation = progressiveLoadGenerationRef.current;
+    setLoadingMore(true);
+    try {
+      const nextPage = await getPublicPhotosPage({
+        offset: nextPhotoOffsetRef.current,
+        limit: FOLLOW_UP_BATCH_SIZE,
+        search,
+      });
+
+      if (progressiveLoadGenerationRef.current !== generation) {
+        return;
+      }
+
+      setPhotos((current) => [...current, ...nextPage.photos]);
+      setTotalPhotoCount(nextPage.totalCount);
+      nextPhotoOffsetRef.current = nextPage.offset + nextPage.photos.length;
+      setHasMorePhotos(nextPage.hasMore && nextPage.photos.length > 0);
+      setLoadMoreFailed(false);
+    } catch (loadError) {
+      console.error(loadError);
+      setError(loadError instanceof Error ? loadError.message : '사진을 더 불러오지 못했습니다.');
+      setLoadMoreFailed(true);
+    } finally {
+      if (progressiveLoadGenerationRef.current === generation) {
         setLoadingMore(false);
       }
     }
@@ -166,27 +182,21 @@ export default function GalleryPage() {
   }
 
   useEffect(() => {
-    let active = true;
+    const timeoutId = window.setTimeout(() => loadPublicPhotos(search), search ? 250 : 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [search]);
 
-    async function loadPhotos() {
-      if (!active) {
-        return;
-      }
-
-      await loadPublicPhotos();
-    }
-
-    loadPhotos();
+  useEffect(() => {
     loadSystemStatus();
 
     const statusIntervalId = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && !selectedPhotoId) {
+      if (document.visibilityState === 'visible') {
         loadSystemStatus();
       }
     }, STATUS_REFRESH_MS);
 
     function handleVisibilityChange() {
-      if (document.visibilityState === 'visible' && !selectedPhotoId) {
+      if (document.visibilityState === 'visible') {
         loadSystemStatus();
       }
     }
@@ -194,12 +204,28 @@ export default function GalleryPage() {
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      active = false;
-      progressiveLoadGenerationRef.current += 1;
       window.clearInterval(statusIntervalId);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [selectedPhotoId]);
+  }, []);
+
+  useEffect(() => {
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel || !hasMorePhotos || loadingMore || loadMoreFailed || slideshowVisible) {
+      return undefined;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          loadMorePhotos();
+        }
+      },
+      { rootMargin: '800px 0px' },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMorePhotos, loadingMore, loadMoreFailed, slideshowVisible, search]);
 
   const displayPhotos = useMemo(() => {
     const keyword = search.trim().toLowerCase();
@@ -232,6 +258,24 @@ export default function GalleryPage() {
   }, [photos, totalPhotoCount]);
 
   const slideshowPhotos = photos;
+
+  async function openSlideshow() {
+    if (hasMorePhotos) {
+      setLoadingMore(true);
+      try {
+        const allPhotos = await getPublicPhotos();
+        setPhotos(allPhotos);
+        setTotalPhotoCount(allPhotos.length);
+        nextPhotoOffsetRef.current = allPhotos.length;
+        setHasMorePhotos(false);
+      } catch (loadError) {
+        setError(loadError instanceof Error ? loadError.message : '슬라이드 사진을 불러오지 못했습니다.');
+      } finally {
+        setLoadingMore(false);
+      }
+    }
+    setSlideshowVisible(true);
+  }
 
   const activeSlide = slideshowPhotos[activeSlideIndex] ?? slideshowPhotos[0] ?? null;
 
@@ -541,7 +585,7 @@ export default function GalleryPage() {
                 <button
                   type="button"
                   className="secondary-button topbar-action-button"
-                  onClick={() => setSlideshowVisible(true)}
+                  onClick={openSlideshow}
                 >
                   슬라이드 보기
                 </button>
@@ -569,13 +613,13 @@ export default function GalleryPage() {
                 <button
                   type="button"
                   className="secondary-button topbar-action-button"
-                  onClick={() => setSlideshowVisible(true)}
+                  onClick={openSlideshow}
                 >
                   슬라이드쇼 보기
                 </button>
-                <Link className="secondary-button topbar-action-button" to="/admin">
+                <a className="secondary-button topbar-action-button" href="#/admin">
                   관리자
-                </Link>
+                </a>
               </div>
             </div>
           )}
@@ -696,12 +740,19 @@ export default function GalleryPage() {
           <article
             className="photo-card"
             key={photo.id}
-            style={{ animationDelay: `${index * 80}ms` }}
+            style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
           >
-            <button
-              type="button"
+            <div
               className="photo-open-button"
               onClick={(event) => openPhoto(photo, event)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  openPhoto(photo, event);
+                }
+              }}
+              role="button"
+              tabIndex={0}
               aria-label={`${getDisplayPhotoTitle(photo)} 크게 보기`}
             >
               <div className="photo-frame">
@@ -709,7 +760,8 @@ export default function GalleryPage() {
                   sources={[photo.thumbUrl, photo.imageUrl]}
                   alt={photo.title}
                   className="photo-card-image"
-                  loading="lazy"
+                  loading={index < 6 ? 'eager' : 'lazy'}
+                  fetchPriority={index < 2 ? 'high' : 'auto'}
                   decoding="async"
                 />
               </div>
@@ -747,9 +799,26 @@ export default function GalleryPage() {
                   ) : null}
                 </div>
               </div>
-            </button>
+            </div>
           </article>
         ))}
+        {hasMorePhotos ? (
+          <div ref={loadMoreSentinelRef} className="admin-loading" aria-hidden="true">
+            {loadingMore ? '사진을 더 불러오는 중입니다.' : ''}
+          </div>
+        ) : null}
+        {loadMoreFailed ? (
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => {
+              setLoadMoreFailed(false);
+              setError('');
+            }}
+          >
+            사진 더 불러오기 재시도
+          </button>
+        ) : null}
         {!loading && !displayPhotos.length ? (
           <article className="photo-card photo-card-empty">
             <div className="photo-content">

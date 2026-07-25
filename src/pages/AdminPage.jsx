@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import exifr from 'exifr';
 import { CheckSquare, LoaderCircle, LogOut, PencilLine, ShieldCheck, Square, Trash2, Upload, X } from 'lucide-react';
 import {
@@ -379,9 +378,9 @@ function AdminLogin({ error, loading, onLogin, buttonContainerRef }) {
       <p className="admin-hint">
         허용된 관리자 계정으로만 로그인할 수 있습니다.
       </p>
-      <Link className="admin-back-link" to="/">
+      <a className="admin-back-link" href="#/">
         공개 갤러리로 돌아가기
-      </Link>
+      </a>
     </div>
   );
 }
@@ -1262,9 +1261,9 @@ export default function AdminPage() {
             </div>
 
             <div className="admin-topbar-actions">
-              <Link className="secondary-button topbar-action-button admin-topbar-button" to="/">
+              <a className="secondary-button topbar-action-button admin-topbar-button" href="#/">
                 공개 갤러리 보기
-              </Link>
+              </a>
               <button
                 type="button"
                 className="secondary-button topbar-action-button admin-topbar-button"

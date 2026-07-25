@@ -74,6 +74,8 @@ const thumbnailHeight = 640;
 const photosObjectKey = 'metadata/photos.json';
 const settingsObjectKey = 'metadata/settings.json';
 const defaultSiteTitle = '그날의 기록 (Records of the Day)';
+const maxJsonBodyBytes = 2 * 1024 * 1024;
+const maxUploadBodyBytes = 50 * 1024 * 1024;
 
 function getUploadObjectKey(fileName) {
   return `uploads/${fileName}`;
@@ -155,7 +157,7 @@ async function getObjectBuffer(key) {
   return Buffer.from(bytes);
 }
 
-async function putObject(key, body, contentType) {
+async function putObject(key, body, contentType, cacheControl = '') {
   if (!r2Client) {
     throw new Error('R2 storage is not configured.');
   }
@@ -165,6 +167,7 @@ async function putObject(key, body, contentType) {
     Key: key,
     Body: body,
     ContentType: contentType,
+    ...(cacheControl ? { CacheControl: cacheControl } : {}),
   }));
 }
 
@@ -289,6 +292,13 @@ let photosCache = null;
 let photosCacheExpiresAt = 0;
 let settingsCache = null;
 let settingsCacheExpiresAt = 0;
+let photoMutationQueue = Promise.resolve();
+
+function serializePhotoMutation(task) {
+  const result = photoMutationQueue.then(task, task);
+  photoMutationQueue = result.catch(() => {});
+  return result;
+}
 
 async function readPhotos() {
   if (photosCache && photosCacheExpiresAt > Date.now()) {
@@ -359,40 +369,45 @@ function sendText(response, statusCode, message) {
 function setCorsHeaders(request, response) {
   const requestOrigin = request.headers.origin || '';
   const allowAnyOrigin = allowedOrigins.length === 0;
-  const allowOrigin = allowAnyOrigin
-    ? requestOrigin || '*'
-    : allowedOrigins.includes(requestOrigin)
-      ? requestOrigin
-      : requestOrigin || allowedOrigins[0];
-
-  response.setHeader('Access-Control-Allow-Origin', allowOrigin);
+  const allowOrigin = allowAnyOrigin ? requestOrigin || '*' : allowedOrigins.includes(requestOrigin) ? requestOrigin : '';
+  if (allowOrigin) {
+    response.setHeader('Access-Control-Allow-Origin', allowOrigin);
+  }
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Photo-Meta');
   response.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   response.setHeader('Vary', 'Origin');
 }
 
-async function readJsonBody(request) {
+async function readBody(request, maxBytes) {
   const chunks = [];
+  let totalBytes = 0;
 
   for await (const chunk of request) {
-    chunks.push(Buffer.from(chunk));
-  }
-
-  if (chunks.length === 0) {
-    return {};
-  }
-
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'));
-}
-
-async function readRawBody(request) {
-  const chunks = [];
-
-  for await (const chunk of request) {
-    chunks.push(Buffer.from(chunk));
+    const buffer = Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > maxBytes) {
+      const error = new Error('Request body is too large.');
+      error.statusCode = 413;
+      throw error;
+    }
+    chunks.push(buffer);
   }
 
   return Buffer.concat(chunks);
+}
+
+async function readJsonBody(request) {
+  const body = await readBody(request, maxJsonBodyBytes);
+
+  if (body.length === 0) {
+    return {};
+  }
+
+  return JSON.parse(body.toString('utf8'));
+}
+
+async function readRawBody(request) {
+  return readBody(request, maxUploadBodyBytes);
 }
 
 function requireMigrationToken(request) {
@@ -546,7 +561,12 @@ async function readThumbnailBuffer(fileName) {
 async function writeThumbnailBuffer(photoId, buffer) {
   const fileName = getThumbnailName(photoId);
   if (r2Enabled) {
-    await putObject(`thumbnails/${fileName}`, buffer, 'image/webp');
+    await putObject(
+      `thumbnails/${fileName}`,
+      buffer,
+      'image/webp',
+      'public, max-age=31536000, immutable',
+    );
     return;
   }
 
@@ -662,7 +682,7 @@ async function handleTogglePhotoLike(response, photoId, direction) {
   const photos = await readPhotos();
   const index = photos.findIndex((photo) => photo.id === photoId);
 
-  if (index === -1) {
+  if (index === -1 || photos[index].isPublic === false) {
     sendJson(response, 404, { error: 'Photo not found.' });
     return;
   }
@@ -925,7 +945,7 @@ async function handleDownloadPhoto(response, photoId) {
   const photos = await readPhotos();
   const target = photos.find((photo) => photo.id === photoId);
 
-  if (!target) {
+  if (!target || target.isPublic === false) {
     sendJson(response, 404, { error: 'Photo not found.' });
     return;
   }
@@ -979,7 +999,15 @@ async function handlePublicPhotos(request, response, url) {
   const photos = (await readPhotos())
     .filter((photo) => photo?.isPublic !== false)
     .map((photo) => normalizePhotoMetadata(photo, requestOrigin));
-  const sorted = [...photos].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+  const search = String(url.searchParams.get('search') || '').trim().toLowerCase();
+  const filtered = search
+    ? photos.filter((photo) => [photo.title, photo.locationText, photo.note, photo.fileName]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+        .includes(search))
+    : photos;
+  const sorted = [...filtered].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
   const settings = await readSettings();
   const hasPaging = url.searchParams.has('offset') || url.searchParams.has('limit');
   const offset = hasPaging ? clampPublicPhotoOffset(url.searchParams.get('offset')) : 0;
@@ -1280,13 +1308,13 @@ const server = createServer(async (request, response) => {
 
     if (request.method === 'POST' && pathname.startsWith('/api/public/photos/') && pathname.endsWith('/like')) {
       const photoId = pathname.split('/')[4];
-      await handleTogglePhotoLike(response, photoId, 'up');
+      await serializePhotoMutation(() => handleTogglePhotoLike(response, photoId, 'up'));
       return;
     }
 
     if (request.method === 'DELETE' && pathname.startsWith('/api/public/photos/') && pathname.endsWith('/like')) {
       const photoId = pathname.split('/')[4];
-      await handleTogglePhotoLike(response, photoId, 'down');
+      await serializePhotoMutation(() => handleTogglePhotoLike(response, photoId, 'down'));
       return;
     }
 
@@ -1317,7 +1345,7 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === 'POST' && pathname === '/api/internal/migrate/photos') {
-      await handleMigrationPhoto(request, response);
+      await serializePhotoMutation(() => handleMigrationPhoto(request, response));
       return;
     }
 
@@ -1332,24 +1360,24 @@ const server = createServer(async (request, response) => {
     }
 
     if (request.method === 'POST' && pathname === '/api/admin/photos') {
-      await handleUploadPhoto(request, response);
+      await serializePhotoMutation(() => handleUploadPhoto(request, response));
       return;
     }
 
     if (request.method === 'PATCH' && pathname.startsWith('/api/admin/photos/')) {
       const photoId = pathname.split('/').pop();
-      await handleUpdatePhoto(request, response, photoId);
+      await serializePhotoMutation(() => handleUpdatePhoto(request, response, photoId));
       return;
     }
 
     if (request.method === 'DELETE' && pathname.startsWith('/api/admin/photos/')) {
       const photoId = pathname.split('/').pop();
-      await handleDeletePhoto(request, response, photoId);
+      await serializePhotoMutation(() => handleDeletePhoto(request, response, photoId));
       return;
     }
 
     if (request.method === 'POST' && pathname === '/api/admin/photos/bulk-delete') {
-      await handleBulkDeletePhotos(request, response);
+      await serializePhotoMutation(() => handleBulkDeletePhotos(request, response));
       return;
     }
 

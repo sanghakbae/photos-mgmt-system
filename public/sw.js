@@ -1,12 +1,14 @@
 const APP_CACHE = 'gallery-app-v1';
 const RUNTIME_CACHE = 'gallery-runtime-v1';
 const IMAGE_CACHE = 'gallery-images-v1';
+const MAX_IMAGE_CACHE_ENTRIES = 300;
+const scopeUrl = new URL(self.registration.scope);
 
 const APP_SHELL_URLS = [
-  '/',
-  '/manifest.webmanifest',
-  '/app-icon.svg',
-  '/mask-icon.svg',
+  scopeUrl.href,
+  new URL('manifest.webmanifest', scopeUrl).href,
+  new URL('app-icon.svg', scopeUrl).href,
+  new URL('mask-icon.svg', scopeUrl).href,
 ];
 
 function isSuccessful(response) {
@@ -54,6 +56,10 @@ async function staleWhileRevalidate(request, cacheName) {
     .then((response) => {
       if (isSuccessful(response)) {
         cache.put(request, response.clone());
+        cache.keys().then((keys) => Promise.all(
+          keys.slice(0, Math.max(0, keys.length - MAX_IMAGE_CACHE_ENTRIES))
+            .map((key) => cache.delete(key)),
+        ));
       }
       return response;
     })
@@ -106,9 +112,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (
-    url.pathname.includes('/uploads/')
-    || url.pathname.includes('/thumbnails/')
-    || request.destination === 'image'
+    url.pathname.includes('/thumbnails/')
   ) {
     event.respondWith(staleWhileRevalidate(request, IMAGE_CACHE));
     return;
