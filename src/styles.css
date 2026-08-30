@@ -64,8 +64,13 @@ a {
 
 .mobile-public-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
-  padding: 10px 10px 24px;
+  padding:
+    calc(env(safe-area-inset-top, 0px) + 12px)
+    calc(env(safe-area-inset-right, 0px) + 10px)
+    calc(env(safe-area-inset-bottom, 0px) + 24px)
+    calc(env(safe-area-inset-left, 0px) + 10px);
   overflow-x: hidden;
 }
 

@@ -29,10 +29,14 @@ const allowedAdminEmails = (process.env.ADMIN_EMAILS || '')
   .split(',')
   .map((value) => value.trim().toLowerCase())
   .filter(Boolean);
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+const defaultAllowedOrigins = ['https://gallery.sanghak.kr'];
+const allowedOrigins = [...new Set([
+  ...defaultAllowedOrigins,
+  ...(process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map((value) => value.trim())
-  .filter(Boolean);
+  .filter(Boolean),
+])];
 const verifiedAdminCache = new Map();
 const verifiedAdminTtlMs = 1000 * 60 * 10;
 const r2AccountId = String(process.env.R2_ACCOUNT_ID || '').trim();
