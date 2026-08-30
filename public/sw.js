@@ -37,6 +37,12 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 async function cacheFirst(request, cacheName) {
   const cached = await caches.match(request);
   if (cached) {

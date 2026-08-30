@@ -3,6 +3,7 @@ import GalleryPage from './pages/GalleryPage';
 import AdminPage from './pages/AdminPage';
 import MobileGalleryPage from './pages/MobileGalleryPage';
 import PwaInstallPrompt from './components/PwaInstallPrompt';
+import PwaUpdatePrompt from './components/PwaUpdatePrompt';
 
 function detectMobileClient() {
   if (typeof window === 'undefined') {
@@ -56,6 +57,7 @@ function App() {
         ? <AdminPage />
         : isMobileClient ? <MobileGalleryPage /> : <GalleryPage />}
       {route !== '/admin' ? <PwaInstallPrompt /> : null}
+      <PwaUpdatePrompt />
     </>
   );
 }
