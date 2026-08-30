@@ -74,6 +74,12 @@ a {
   overflow-x: hidden;
 }
 
+@media (display-mode: standalone) {
+  .mobile-public-shell {
+    padding-top: max(calc(env(safe-area-inset-top, 0px) + 12px), 56px);
+  }
+}
+
 .mobile-public-header,
 .mobile-public-toolbar,
 .mobile-public-card,
