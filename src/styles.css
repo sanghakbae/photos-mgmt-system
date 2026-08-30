@@ -2386,3 +2386,102 @@ a {
 .photo-location-link:hover {
   opacity: 0.8;
 }
+
+.pwa-install-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 1000;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 12px;
+  width: min(620px, calc(100vw - 24px));
+  padding: 12px 12px 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  color: #fff7ef;
+  background: rgba(20, 24, 31, 0.96);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(18px);
+  animation: pwa-prompt-enter 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.pwa-install-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 13px;
+}
+
+.pwa-install-copy {
+  min-width: 0;
+}
+
+.pwa-install-copy strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.95rem;
+}
+
+.pwa-install-copy p {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin: 0;
+  color: rgba(255, 247, 239, 0.72);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.pwa-install-button,
+.pwa-install-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+}
+
+.pwa-install-button {
+  gap: 5px;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 12px;
+  color: #171b22;
+  background: #f1a06d;
+  font-weight: 700;
+}
+
+.pwa-install-close {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@keyframes pwa-prompt-enter {
+  from { opacity: 0; transform: translate(-50%, 18px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+@media (max-width: 620px) {
+  .pwa-install-prompt {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .pwa-install-button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .pwa-install-close {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pwa-install-prompt { animation: none; }
+}

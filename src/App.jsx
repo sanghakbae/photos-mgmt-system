@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import GalleryPage from './pages/GalleryPage';
 import AdminPage from './pages/AdminPage';
 import MobileGalleryPage from './pages/MobileGalleryPage';
+import PwaInstallPrompt from './components/PwaInstallPrompt';
 
 function detectMobileClient() {
   if (typeof window === 'undefined') {
@@ -49,9 +50,14 @@ function App() {
     };
   }, []);
 
-  return route === '/admin'
-    ? <AdminPage />
-    : isMobileClient ? <MobileGalleryPage /> : <GalleryPage />;
+  return (
+    <>
+      {route === '/admin'
+        ? <AdminPage />
+        : isMobileClient ? <MobileGalleryPage /> : <GalleryPage />}
+      {route !== '/admin' ? <PwaInstallPrompt /> : null}
+    </>
+  );
 }
 
 export default App;

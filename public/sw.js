@@ -1,6 +1,6 @@
-const APP_CACHE = 'gallery-app-v1';
-const RUNTIME_CACHE = 'gallery-runtime-v1';
-const IMAGE_CACHE = 'gallery-images-v1';
+const APP_CACHE = 'gallery-app-v2';
+const RUNTIME_CACHE = 'gallery-runtime-v2';
+const IMAGE_CACHE = 'gallery-images-v2';
 const MAX_IMAGE_CACHE_ENTRIES = 300;
 const scopeUrl = new URL(self.registration.scope);
 
@@ -9,6 +9,10 @@ const APP_SHELL_URLS = [
   new URL('manifest.webmanifest', scopeUrl).href,
   new URL('app-icon.svg', scopeUrl).href,
   new URL('mask-icon.svg', scopeUrl).href,
+  new URL('icons/icon-192.png', scopeUrl).href,
+  new URL('icons/icon-512.png', scopeUrl).href,
+  new URL('icons/icon-maskable-512.png', scopeUrl).href,
+  new URL('icons/apple-touch-icon.png', scopeUrl).href,
 ];
 
 function isSuccessful(response) {
